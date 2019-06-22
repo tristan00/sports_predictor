@@ -1,0 +1,8 @@
+
+*.pyc
+*.plk
+*.json
+*.tfevents
+*.tsv
+*.csv
+*.dot
