@@ -10,6 +10,7 @@ import urllib
 from urllib.parse import urljoin
 import re
 from itertools import permutations
+from common import sleep_random_amount, clean_text, mma_data_location
 
 start_pages = {'https://en.wikipedia.org/wiki/Chael_Sonnen',
                'https://en.wikipedia.org/wiki/Holly_Holm',
@@ -18,9 +19,14 @@ start_pages = {'https://en.wikipedia.org/wiki/Chael_Sonnen',
 
 mma_page_section_names = ['mixed martial arts record']
 boxing_page_section_names = ['professional boxing record']
+kickboxing_page_section_names = ['kickboxing record']
+mma_amateur_section = ['mixed martial arts amateur record']
+mma_pro_section = ['mixed martial arts professional record']
+shoot_boxing_section = ['shoot boxing record']
+professional_boxing_section_names = ['professional boxing']
 professional_record_names = ['professional record']
+submission_grappling_record = ['submission grappling record']
 
-data_location = r'C:\Users\trist\OneDrive\Desktop\mma_data'
 base_url = 'https://en.wikipedia.org/'
 country_url = 'https://en.wikipedia.org/wiki/List_of_countries_and_dependencies_by_population'
 start_run_time = time.time()
@@ -41,17 +47,24 @@ exhibition_summary_table_text = ['exhibition record summary', 'exhibition record
 
 
 def get_section_name_variations(initial_list):
-    suffixes = ['[edit]', '(Incomplete)', ' ', ' ']
-    prefixes = ['amateur', 'professional', ' ', ' ']
+    suffixes = ['[edit]', '(incomplete)', ' ', ' ', '']
+    prefixes = ['amateur', 'professional', ' ', ' ', '']
     input_list = suffixes + prefixes + initial_list
     output_list = [''.join(l) for i in range(len(suffixes)) for l in permutations(input_list, i + 1)]
     output_list = [i for i in output_list if [j for j in initial_list if j in i]]
-    # print(output_list)
     return output_list
+
+
 
 mma_page_section_names = get_section_name_variations(mma_page_section_names)
 boxing_page_section_names = get_section_name_variations(boxing_page_section_names)
+kickboxing_page_section_names = get_section_name_variations(kickboxing_page_section_names)
+mma_amateur_section = get_section_name_variations(mma_amateur_section)
+mma_pro_section = get_section_name_variations(mma_pro_section)
+shoot_boxing_section = get_section_name_variations(shoot_boxing_section)
+professional_boxing_section_names = get_section_name_variations(professional_boxing_section_names)
 professional_record_names = get_section_name_variations(professional_record_names)
+submission_grappling_record = get_section_name_variations(submission_grappling_record)
 
 
 def get_country_urls():
@@ -72,21 +85,6 @@ def get_country_urls():
 
 links_to_avoid = get_country_urls()
 
-
-def clean_text(s):
-    return str(s).replace('|', ' ')
-
-
-def sleep_random_amount(min_time=1.0, max_time=5.0, mu=None, sigma=1.0, verbose=False):
-    if not mu:
-        mu = (max_time + min_time)/2
-
-    var = stats.truncnorm(
-        (min_time - mu) / sigma, (max_time - mu) / sigma, loc=mu, scale=sigma)
-    sleep_time = var.rvs()
-    if verbose:
-        print('Sleeping for {0} seconds: {0}'.format(sleep_time))
-    time.sleep(sleep_time)
 
 
 
@@ -127,12 +125,15 @@ def extract_table(f_url, tables_dict, general_stats):
     for s in sport_keys:
         types_of_events = tables_dict[s].keys()
         for t in types_of_events:
+            print(s, t)
             for j in tables_dict[s][t]:
+                print(1)
                 tr_tags = j.find_all('tr')
                 header_index = get_row_num_of_headers(j)
 
                 opponent_col_name = [i.get_text().strip() for i in tr_tags[header_index].find_all(['th', 'td']) if 'opponent' in i.get_text().strip().lower()][0]
                 index_of_opponent = [c for c, i in enumerate(tr_tags[header_index].find_all(['th', 'td'])) if opponent_col_name.strip() == i.get_text().strip()][0]
+
 
                 id_mapping = dict()
                 for k in tr_tags[header_index + 1:]:
@@ -155,8 +156,11 @@ def extract_table(f_url, tables_dict, general_stats):
                         has_wiki = 0
                     id_mapping[opponent_name] = {'id': opponent_id, 'has_wiki': has_wiki}
 
+
                 df = pd.read_html(str(j), header=header_index)[0]
                 df['fighter_id'] = fighter_id
+
+
                 df['opponent_id'] = df.apply(lambda x: id_mapping.get(x[opponent_col_name], {'id':str(uuid.uuid4())})['id'], axis = 1)
                 df['opponent_has_wiki'] = df.apply(lambda x: id_mapping.get(x[opponent_col_name], {'has_wiki':0})['has_wiki'], axis = 1)
 
@@ -260,6 +264,32 @@ def scrape_fighter(next_url):
                 sections_dict[boxing_key].setdefault(pro_key, list())
                 sections_dict[boxing_key].setdefault(amateur_key, list())
                 active_key1 = boxing_key
+            # elif i in kickboxing_page_section_names:
+            #     sections_dict.setdefault(kickboxing_key, dict())
+            #     sections_dict[kickboxing_key].setdefault(exhibition_key, list())
+            #     sections_dict[kickboxing_key].setdefault(pro_key, list())
+            #     sections_dict[kickboxing_key].setdefault(amateur_key, list())
+            #     active_key1 = kickboxing_key
+            elif i in mma_amateur_section:
+                sections_dict.setdefault(mma_key, dict())
+                sections_dict[mma_key].setdefault(amateur_key, list())
+                active_key1 = mma_key
+                active_key2 = amateur_key
+            elif i in mma_amateur_section:
+                sections_dict.setdefault(mma_key, dict())
+                sections_dict[mma_key].setdefault(amateur_key, list())
+                active_key1 = mma_key
+                active_key2 = amateur_key
+            elif i in mma_pro_section:
+                sections_dict.setdefault(mma_key, dict())
+                sections_dict[mma_key].setdefault(pro_key, list())
+                active_key1 = mma_key
+                active_key2 = pro_key
+            elif i in professional_boxing_section_names:
+                sections_dict.setdefault(boxing_key, dict())
+                sections_dict[boxing_key].setdefault(pro_key, list())
+                active_key1 = boxing_key
+                active_key2 = pro_key
             elif i in professional_record_names:
                 sport_type = guess_sport(stats_table_card, r.text)
                 print('guessing sport: {0} {1}'.format(next_url, sport_type))
@@ -289,11 +319,11 @@ def scrape_fighter(next_url):
 
 def scrape():
     #bfs is more reliable
-
+    df = pd.DataFrame()
     dfs = []
 
     pages_to_search = start_pages.copy()
-    # pages_to_search = {'https://en.wikipedia.org/wiki/Lee_Swaby'}
+    pages_to_search = {'https://en.wikipedia.org/wiki/Holly_Holm'}
     next_iteration_pages_to_search = set()
     searched_pages = set()
 
@@ -316,8 +346,10 @@ def scrape():
                     dfs.append(new_df)
                     new_mma_df = new_df[new_df['sport'] == mma_key]
                     new_boxing_df = new_df[new_df['sport'] == boxing_key]
-                    print('scaped url: {0},  mma records: {1},  boxing records: {2}'.format(next_url, new_mma_df.shape[0],
-                                                                                            new_boxing_df.shape[0]))
+                    new_kickboxing_df = new_df[new_df['sport'] == kickboxing_key]
+
+                    print('scaped url: {0},  mma records: {1},  boxing records: {2}, kickboxing records: {3}'.format(next_url, new_mma_df.shape[0],
+                                                                                            new_boxing_df.shape[0], new_kickboxing_df.shape[0]))
                 next_iteration_pages_to_search = next_iteration_pages_to_search | {i for i in new_urls if i not in searched_pages and i not in pages_to_search}
 
                 if dfs:
@@ -325,15 +357,20 @@ def scrape():
                     print('full df shape: {0}'.format(df.shape))
                     mma_df = df[df['sport'] == mma_key]
                     boxing_df = df[df['sport'] == boxing_key]
-                    print('iteration: {0}, mma_records: {1}, boxing records: {2}, searched_pages: {3}, pages_to_search: {4}, next_iteration_pages_to_search: {5}'.format(iteration, mma_df.shape[0], boxing_df.shape[0], len(searched_pages), len(pages_to_search), len(next_iteration_pages_to_search)))
-                    df.to_csv('{0}/raw_{1}.csv'.format(data_location, int(start_run_time)))
+                    kickboxing_df = df[df['sport'] == kickboxing_key]
+
+                    print('iteration: {0}, mma_records: {1}, boxing records: {2}, kickboxing records: {3}, searched_pages: {4}, pages_to_search: {5}, next_iteration_pages_to_search: {6}'.format(iteration, mma_df.shape[0], boxing_df.shape[0], kickboxing_df.shape[0], len(searched_pages), len(pages_to_search), len(next_iteration_pages_to_search)))
+                    df.to_csv('{0}/raw_{1}.csv'.format(mma_data_location, int(start_run_time)), sep = '|', index = False)
             except:
                 import traceback
                 traceback.print_exc()
+                print('Error')
+                time.sleep(10)
 
         pages_to_search = next_iteration_pages_to_search.copy()
         next_iteration_pages_to_search = set()
         iteration += 1
+        df.to_csv('{0}/raw_{1}.csv'.format(mma_data_location, int(start_run_time)), sep='|', index=False)
 
 
 if __name__ == '__main__':
