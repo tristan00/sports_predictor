@@ -9,31 +9,61 @@ from common import sleep_random_amount, clean_text, pad_num, boxing_data_locatio
 from private import box_rec_user_name, box_rec_password
 import pickle
 import traceback
+import functools
+import operator
+import tqdm
+
 
 base_url = 'http://boxrec.com'
 fight_columns = ['division', 'boxer', 'lbs', 'w-l-d', 'last 6', 'rounds', 'opponent', 'lbs', 'w-l-d', 'last 6']
 
 
 class Scraper():
-    def __init__(self, min_sleep_time = 5.0, max_sleep_time = 10.0):
+    def __init__(self, min_sleep_time = 5.0, max_sleep_time = 10.0, use_cache = True):
         self.min_sleep_time = min_sleep_time
         self.max_sleep_time = max_sleep_time
 
         self.scrape_date = datetime.datetime.today()
         self.login()
-        self.fighter_url_set = set()
 
         self.fighter_data = []
         self.fight_data = []
-        try:
-            with open('{}/fighter_cache.pkl'.format(boxing_data_location), 'rb') as f:
-                self.fighter_url_cache = pickle.load(f)
-        except:
+
+        if use_cache:
             try:
-                with open('{}/fighter_cache_backup.pkl'.format(boxing_data_location), 'rb') as f:
+                with open('{}/fighter_cache.pkl'.format(boxing_data_location), 'rb') as f:
                     self.fighter_url_cache = pickle.load(f)
             except:
-                self.fighter_url_cache = dict()
+                try:
+                    with open('{}/fighter_cache_backup.pkl'.format(boxing_data_location), 'rb') as f:
+                        self.fighter_url_cache = pickle.load(f)
+                except:
+                    self.fighter_url_cache = dict()
+
+            try:
+                with open('{}/fight_cache.pkl'.format(boxing_data_location), 'rb') as f:
+                    self.fight_url_cache = pickle.load(f)
+            except:
+                try:
+                    with open('{}/fight_cache_backup.pkl'.format(boxing_data_location), 'rb') as f:
+                        self.fight_url_cache = pickle.load(f)
+                except:
+                    self.fight_url_cache = dict()
+
+            try:
+                with open('{}/fighter_url_set.pkl'.format(boxing_data_location), 'rb') as f:
+                    self.fighter_url_set = pickle.load(f)
+            except:
+                try:
+                    with open('{}/fighter_url_set.pkl'.format(boxing_data_location), 'rb') as f:
+                        self.fighter_url_set = pickle.load(f)
+                except:
+                    self.fighter_url_set = set()
+        else:
+            self.fighter_url_cache = dict()
+            self.fight_url_cache = dict()
+            self.fighter_url_set = set()
+
 
     def login(self):
         self.s = requests.Session()
@@ -57,7 +87,20 @@ class Scraper():
         with open('{}/fighter_cache_backup.pkl'.format(boxing_data_location), 'wb') as f:
             pickle.dump(self.fighter_url_cache, f)
 
+        with open('{}/fight_cache.pkl'.format(boxing_data_location), 'wb') as f:
+            pickle.dump(self.fight_url_cache, f)
+        with open('{}/fight_cache_backup.pkl'.format(boxing_data_location), 'wb') as f:
+            pickle.dump(self.fight_url_cache, f)
+
+        with open('{}/fighter_url_set.pkl'.format(boxing_data_location), 'wb') as f:
+            pickle.dump(self.fighter_url_set, f)
+        with open('{}/fighter_url_set_backup.pkl'.format(boxing_data_location), 'wb') as f:
+            pickle.dump(self.fighter_url_set, f)
+
     def scrape_fights_at_url(self, url,  year, month, day):
+
+        self.fight_url_cache.setdefault(url, [])
+
         r = self.s.get(url)
         soup = BeautifulSoup(r.text)
         table = soup.find('table', {'id':'calendarDate'})
@@ -191,7 +234,7 @@ class Scraper():
                                     'fighter_url': fighter2_url,
                                     'fighter_record': fighter2_record,
                                     'result': result2,
-                                    'opponent_name': fighter1_url,
+                                    'opponent_name': fighter1_name,
                                     'opponent_url': fighter1_url,
                                     'opponent_record': fighter1_record,
                                     'bout_link': bout_link,
@@ -209,9 +252,11 @@ class Scraper():
                         self.fighter_url_set.add(fighter2_url)
                         fighter_set.add(fighter2_url)
                         fighter_set.add(fighter1_url)
+                        self.fight_url_cache[url].append(new_rec1)
+                        self.fight_url_cache[url].append(new_rec2)
 
-                        self.fight_data.append(new_rec1)
-                        self.fight_data.append(new_rec2)
+                        # self.fight_data.append(new_rec1)
+                        # self.fight_data.append(new_rec2)
         print('Found {0} fights and {1} fighters at {2}'.format(fight_counter, len(fighter_set), url))
         self.scrape_fighters()
         print('Current data count', len(self.fight_data), len(self.fighter_data))
@@ -223,7 +268,7 @@ class Scraper():
 
         # print(' num of fighters: {0}'.format(len(self.fighter_url_set)))
         num_of_website_hits = 0
-        for c, i in enumerate(self.fighter_url_set):
+        for i in tqdm.tqdm(self.fighter_url_set):
             # if max_website_hits > 0 and num_of_website_hits >= max_website_hits:
             #     break
             try:
@@ -232,7 +277,7 @@ class Scraper():
                     #       len(self.fighter_url_set), len(self.fight_data),
                     #       len(self.fighter_url_set) / len(self.fight_data),
                     #       len(self.fighter_url_cache))
-                    print('scraping: {0}, {1}, {2}'.format(i, c, num_of_website_hits))
+                    # print('scraping: {0}, {1}, {2}'.format(i, c, num_of_website_hits))
 
                     num_of_website_hits += 1
                     new_output = {'fighter_url': i}
@@ -256,7 +301,9 @@ class Scraper():
         for i in self.fighter_url_cache:
             if i not in self.fighter_data:
                 self.fighter_data.append(self.fighter_url_cache[i])
+
         self.fighter_data = [j for _, j in self.fighter_url_cache.items()]
+        self.fight_data = functools.reduce(operator.concat, [i for i in self.fight_url_cache.values()])
         self.save_cache()
 
     def save_data(self):
@@ -273,20 +320,16 @@ class Scraper():
 
         df1.to_csv('{0}/fights_{1}_{2}_{3}.csv'.format(boxing_data_location, pad_num(self.scrape_date.year, 4),
                                                        pad_num(self.scrape_date.month, 2),
-                                                       pad_num(self.scrape_date.day, 2),
-                                                        sep='|', index=False))
+                                                       pad_num(self.scrape_date.day, 2)), sep='|', index=False)
         df1.to_csv('{0}/fights_{1}_{2}_{3}_backup.csv'.format(boxing_data_location, pad_num(self.scrape_date.year, 4),
                                                        pad_num(self.scrape_date.month, 2),
-                                                       pad_num(self.scrape_date.day, 2),
-                                                       sep='|', index=False))
+                                                       pad_num(self.scrape_date.day, 2)), sep='|', index=False)
         df2.to_csv('{0}/fighters_{1}_{2}_{3}.csv'.format(boxing_data_location, pad_num(self.scrape_date.year, 4),
                                                          pad_num(self.scrape_date.month, 2),
-                                                         pad_num(self.scrape_date.day, 2),
-                                                        sep='|', index=False))
+                                                         pad_num(self.scrape_date.day, 2)), sep='|', index=False)
         df2.to_csv('{0}/fighters_{1}_{2}_{3}_backup.csv'.format(boxing_data_location, pad_num(self.scrape_date.year, 4),
                                                          pad_num(self.scrape_date.month, 2),
-                                                         pad_num(self.scrape_date.day, 2),
-                                                         sep='|', index=False))
+                                                         pad_num(self.scrape_date.day, 2)), sep='|', index=False)
         print(df1.shape, df2.shape)
         self.login()
 
@@ -314,8 +357,9 @@ class Scraper():
                 #       len(self.fight_data))
                 url = 'http://boxrec.com/en/date?date={0}-{1}-{2}'.format(year_str, month_str, day_str)
 
-                self.scrape_fights_at_url(url, year_str, month_str, day_str)
-                sleep_random_amount(min_time=self.min_sleep_time, max_time=self.max_sleep_time)
+                if url not in self.fight_url_cache:
+                    self.scrape_fights_at_url(url, year_str, month_str, day_str)
+                    sleep_random_amount(min_time=self.min_sleep_time, max_time=self.max_sleep_time)
             except:
                 traceback.print_exc()
                 sleep_random_amount(min_time=60, max_time=300)
@@ -325,7 +369,8 @@ class Scraper():
 
 
 if __name__ == '__main__':
-    s = Scraper(min_sleep_time = 1.0, max_sleep_time = 5.0)
-    s.scrape_website(1950, 2019, date_chunk_size = 1)
+    use_cache = True
+    s = Scraper(min_sleep_time = .1, max_sleep_time = .5, use_cache = use_cache)
+    s.scrape_website(2000, 2019, date_chunk_size = 1)
 
 
