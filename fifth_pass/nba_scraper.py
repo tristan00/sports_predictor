@@ -46,7 +46,7 @@ class Scraper:
         padded_year = pad_num(self.current_date.year, 4)
         padded_month = pad_num(self.current_date.month, 2)
         padded_day = pad_num(self.current_date.day, 2)
-
+        game_links = []
         url = day_scores_base_url.format(month = padded_year,
                                    day = padded_month,
                                    year = padded_day)
@@ -55,19 +55,20 @@ class Scraper:
 
         for i in games:
             links = i.find_all('a')
-            days_games_box_score_links = [j['href'] for j in links if 'boxscores' in j['href']]
-            self.game_links.extend(days_games_box_score_links)
+            days_games_box_score_links = [base_url + j['href'] for j in links if 'boxscores' in j['href']]
+            game_links.extend(days_games_box_score_links)
 
         with sqlite3.connect('{data_path}/{db_name}.db'.format(data_path=data_path, db_name=db_name)) as conn:
-            try:
-                conn.execute(
-                    'insert into {table_name} ({url}, {year}, {month}, {day});'.format(table_name = box_score_link_table_name,
-                                                                                                   url = url,
-                                                                                                   year = padded_year,
-                                                                                                   month = padded_month,
-                                                                                                   day = padded_day))
-            except sqlite3.IntegrityError:
-                logging.exception('integrity error')
+            for i in game_links:
+                try:
+                    conn.execute(
+                        'insert into {table_name} ({url}, {year}, {month}, {day});'.format(table_name = box_score_link_table_name,
+                                                                                                       url = i,
+                                                                                                       year = padded_year,
+                                                                                                       month = padded_month,
+                                                                                                       day = padded_day))
+                except sqlite3.IntegrityError:
+                    logging.exception('integrity error')
 
     def scrape_date_range_boxscore_links(self):
         while self.current_date <= self.end_date and self.current_date >= self.start_date:
@@ -75,20 +76,24 @@ class Scraper:
             self.scrape_current_day_boxscore_links()
         self.load_data()
 
-    def scrape_box_office_details(self):
-        pass
+    def scrape_box_office_details(self, url):
+        url = base_url + url
+        soup = get_soup(url, session=self.session)
+        score_box = soup.find('div', {'class': 'scorebox'})
+        score_box_divs = score_box.find_all('div', recursive = False)
+        team_1 = score_box_divs[0]
+        team_2 = score_box_divs[1]
+        game_meta = score_box_divs[2]
+
+        team_1_link = team_1.find('a', {'itemprop':'name'})
+        team_2_link = team_1.find('a', {'itemprop':'name'})
+
 
     def scrape_all_box_office_details(self):
         box_links = set(self.box_office_links['url'])
         for i in box_links:
-            url = base_url + i
-            soup = get_soup(url, session = self.session)
-            
-
-
-
-
+            self.scrape_box_office_details(i)
 
 if __name__ == '__main__':
-    scraper = Scraper()
+    scraper = Scraper(start_date = datetime.date(2010, 1, 1))
     scraper.scrape_date_range_boxscore_links()
