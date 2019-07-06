@@ -12,7 +12,7 @@ def clean_text(s):
     return str(s).replace('|', ' ')
 
 
-def sleep_random_amount(min_time=2.0, max_time=10.0, mu=None, sigma=1.0, verbose=False):
+def sleep_random_amount(min_time=5.0, max_time=10.0, mu=None, sigma=1.0, verbose=False):
     if not mu:
         mu = (max_time + min_time)/2
 
