@@ -1,6 +1,7 @@
 import datetime
 from common import (pad_num,
-                    sleep_random_amount,
+                    sleep_on_error,
+                    sleep_normal,
                     get_session,
                     base_url,
                     day_scores_base_url,
@@ -12,6 +13,7 @@ from common import (pad_num,
                     box_score_record_pickle_file_name,
                     max_tries,
                     file_lock)
+
 from bs4 import BeautifulSoup
 import pickle
 import pandas as pd
@@ -22,7 +24,7 @@ import traceback
 
 def get_soup(url, session = None, sleep = True):
     if sleep:
-        sleep_random_amount()
+        sleep_normal()
 
     if not session:
         session = get_session()
@@ -162,7 +164,7 @@ class Scraper:
                 break
             except:
                 traceback.print_exc()
-                time.sleep(300)
+                sleep_on_error()
 
     def scrape_box_office_details(self, url, year, month, day):
         for i in range(max_tries):
@@ -254,12 +256,12 @@ class Scraper:
                 self.box_office_details = self.box_office_details.drop_duplicates()
 
                 new_df = pd.DataFrame.from_dict(player_data)
-                self.player_box_office_details = pd.concat([new_df, self.player_box_office_details])
+                self.player_box_office_details = pd.concat([new_df, self.player_box_office_details], sort = True)
                 self.player_box_office_details = self.player_box_office_details.drop_duplicates()
                 break
             except:
                 traceback.print_exc()
-                time.sleep(300)
+                sleep_on_error()
 
 
     def scrape_date_range_boxscore_links(self, save_data = False):

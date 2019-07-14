@@ -84,24 +84,34 @@ def feature_search():
 
 
 def generate_features(df):
-    for i in df.columns:
-        for j in df.columns:
+    initial_df_shape = df.shape
+    inital_df_columns = df.columns
+
+    for i in inital_df_columns:
+        for j in inital_df_columns:
             if i not in target_cols and j not in target_cols and i != j and df[i].dtype in numerics and df[j].dtype in numerics:
+                print(initial_df_shape, df.shape, i, j)
                 new_col = '{}_sub_by_{}'.format(i, j)
                 df[new_col] = df[i] - df[j]
+                new_col = '{}_div_by_{}'.format(i, j)
+                df[new_col] = df[i] / df[j]
     return df
 
 def feature_reduction(max_features = 100):
     rating_df = pd.read_csv(r'C:\Users\trist\Documents\nba_data\team_features.csv', sep = '|')
+    rating_df.sample(n = 500)
     rating_df = generate_features(rating_df)
     results = list()
     y =  rating_df['win']
 
     x_df = rating_df.select_dtypes(include=numerics)
     x_df = x_df.drop(target_cols, axis = 1)
+
+    x_df = x_df.replace(np.inf, np.nan)
+    x_df = x_df.replace(-np.inf, np.nan)
     x_df = x_df.fillna(x_df.median())
 
-    rf = RandomForestClassifier(max_depth=12, n_estimators=100)
+    rf = RandomForestClassifier(max_depth=12, n_estimators=1000, n_jobs=-1)
     rf.fit(x_df, y)
 
     features = []

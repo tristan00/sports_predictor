@@ -33,6 +33,14 @@ def clean_text(s):
     return str(s).replace('|', ' ')
 
 
+def sleep_on_error():
+    sleep_random_amount(min_time=1800, max_time=3600)
+
+
+def sleep_normal():
+    sleep_random_amount(min_time=.1, max_time=1.0)
+
+
 def sleep_random_amount(min_time=.05, max_time=.2, mu=None, sigma=1.0, verbose=False):
     if not mu:
         mu = (max_time + min_time)/2
