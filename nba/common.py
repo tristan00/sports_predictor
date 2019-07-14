@@ -2,6 +2,8 @@ from scipy import stats
 import time
 import requests
 from bs4 import BeautifulSoup
+import threading
+
 mma_data_location = r'C:\Users\trist\OneDrive\Desktop\mma_data'
 boxing_data_location = r'C:\Users\trist\OneDrive\Desktop\boxing_data'
 
@@ -15,6 +17,8 @@ box_score_details_table_name = 'boxscore_details'
 player_detail_table_name = 'player_details'
 date_record_pickle_file_name = 'scraped_dates'
 box_score_record_pickle_file_name = 'scraped_games'
+max_tries = 5
+file_lock = threading.Lock()
 
 starting_rating = 1000
 rating_k_factor = 100
@@ -22,11 +26,14 @@ rating_floor = 100
 rating_ceiling = 10000
 rating_d = 1000
 
+
+
+
 def clean_text(s):
     return str(s).replace('|', ' ')
 
 
-def sleep_random_amount(min_time=5.0, max_time=10.0, mu=None, sigma=1.0, verbose=False):
+def sleep_random_amount(min_time=.05, max_time=.1, mu=None, sigma=1.0, verbose=False):
     if not mu:
         mu = (max_time + min_time)/2
 
@@ -59,7 +66,7 @@ def get_soup(url, session = None, sleep = True):
         session = get_session()
 
     r = session.get(url)
-    soup = BeautifulSoup(r.text)
+    soup = BeautifulSoup(r.text, 'lxml')
     return soup
 
 def get_new_rating(rating1, rating2, outcome, multiplier = 1, rating_type = 0):
@@ -85,17 +92,28 @@ def get_new_rating(rating1, rating2, outcome, multiplier = 1, rating_type = 0):
         next_rating = min(next_rating, rating_ceiling)
     elif rating_type == 2:
         if outcome == 1:
-            if (rating1 + rating_k_factor) <= rating2:
+            if rating1  < rating2:
                 next_rating = rating2 + rating_k_factor
             else:
                 next_rating= rating1 + rating_k_factor
         else:
-            if (rating2 + rating_k_factor) <= rating1:
+            if rating2  < rating1:
                 next_rating = rating2 - rating_k_factor
             else:
                 next_rating= rating1 - rating_k_factor
         next_rating = max(next_rating, rating_floor)
         next_rating = min(next_rating, rating_ceiling)
+    elif rating_type == 3:
+        if outcome == 1:
+            if rating1 >= rating2:
+                next_rating = (rating1 + rating_k_factor + starting_rating)/2
+            else:
+                next_rating = (rating1 + starting_rating) / 2
+        else:
+            if rating1 >= rating2:
+                next_rating = (rating1 - rating_k_factor + starting_rating)/2
+            else:
+                next_rating = (rating1 + starting_rating) / 2
     else:
         raise NotImplemented
     return next_rating

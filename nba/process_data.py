@@ -7,7 +7,8 @@ from common import (
                     player_detail_table_name,
                     starting_rating,
                     pad_num,
-                    get_new_rating
+                    get_new_rating,
+                    file_lock
                     )
 # import multiprocessing
 from collections import Counter
@@ -78,6 +79,7 @@ class DataManager():
         self.calculate_game_ratings_on_subset(self.team_data, 'total_0_', rating_type = 0)
         self.calculate_game_ratings_on_subset(self.team_data, 'total_1_', rating_type = 1)
         self.calculate_game_ratings_on_subset(self.team_data, 'total_2_', rating_type = 2)
+        self.calculate_game_ratings_on_subset(self.team_data, 'total_3_', rating_type = 33)
 
         # self.calculate_game_ratings_on_subset(self.team_data[self.team_data['stat_is_home'] == 1], 'home')
         # self.calculate_game_ratings_on_subset(self.team_data[self.team_data['stat_is_home'] == 0], 'away')
@@ -132,7 +134,7 @@ class DataManager():
             else:
                 old_rating_2 = last_record_2['{prefix}_postgame_rating'.format(prefix=prefix)]
 
-            new_rating_1 = get_new_rating(old_rating_1, old_rating_2, j['win'])
+            new_rating_1 = get_new_rating(old_rating_1, old_rating_2, j['win'], rating_type = rating_type)
             self.team_data.loc[(self.team_data['date_str'] == j['date_str']) & (self.team_data['team_tag'] == tag_1), '{prefix}_pregame_rating'.format( prefix=prefix)] = old_rating_1
             df_subset.loc[(df_subset['date_str'] == j['date_str']) & (df_subset['team_tag'] == tag_1), '{prefix}_pregame_rating'.format( prefix=prefix)] = old_rating_1
             self.team_data.loc[(self.team_data['date_str'] >= j['date_str']) & (self.team_data['team_tag'] == tag_1), '{prefix}_postgame_rating'.format(prefix=prefix)] = new_rating_1
@@ -174,12 +176,14 @@ class DataManager():
 
 
 def create_data_files():
-    team_data = pd.read_csv('{data_path}/{db_name}.csv'.format(data_path=data_path,
-                                                               db_name=box_score_details_table_name),
-                            sep='|', low_memory=False)
-    player_data = pd.read_csv('{data_path}/{db_name}.csv'.format(data_path=data_path,
-                                                                 db_name=player_detail_table_name),
-                              sep='|', low_memory=False)
+    with file_lock:
+        team_data = pd.read_csv('{data_path}/{db_name}.csv'.format(data_path=data_path,
+                                                                   db_name=box_score_details_table_name),
+                                sep='|', low_memory=False)
+        # team_data = team_data[team_data['year'] > 2018]
+        player_data = pd.read_csv('{data_path}/{db_name}.csv'.format(data_path=data_path,
+                                                                     db_name=player_detail_table_name),
+                                  sep='|', low_memory=False)
 
     team_data = assign_home(team_data)
     DataManager(team_data, player_data)

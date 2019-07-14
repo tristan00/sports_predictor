@@ -9,11 +9,15 @@ from common import (pad_num,
                     box_score_details_table_name,
                     player_detail_table_name,
                     date_record_pickle_file_name,
-                    box_score_record_pickle_file_name)
+                    box_score_record_pickle_file_name,
+                    max_tries,
+                    file_lock)
 from bs4 import BeautifulSoup
 import pickle
 import pandas as pd
 import copy
+import time
+import traceback
 
 
 def get_soup(url, session = None, sleep = True):
@@ -106,156 +110,154 @@ class Scraper:
         self.load_data()
 
     def save_data(self):
-        with open('{data_path}/{file_name}.pkl'.format(data_path=data_path, file_name=date_record_pickle_file_name), 'wb') as f:
-            pickle.dump(self.dates_searched_for_links, f)
-        with open('{data_path}/{file_name}.pkl'.format(data_path=data_path, file_name=box_score_record_pickle_file_name),
-                  'wb') as f:
-                pickle.dump(self.game_links_searched, f)
-        self.box_office_links.to_csv('{data_path}/{db_name}.csv'.format(data_path=data_path, db_name=box_score_link_table_name), index=False, sep = '|')
-        self.box_office_details.to_csv('{data_path}/{db_name}.csv'.format(data_path=data_path, db_name=box_score_details_table_name), index=False, sep = '|')
-        self.player_box_office_details.to_csv('{data_path}/{db_name}.csv'.format(data_path=data_path, db_name=player_detail_table_name), index=False, sep = '|')
-
-        with open('{data_path}/{file_name}_backup.pkl'.format(data_path=data_path, file_name=date_record_pickle_file_name), 'wb') as f:
-            pickle.dump(self.dates_searched_for_links, f)
-        with open('{data_path}/{file_name}_backup.pkl'.format(data_path=data_path, file_name=box_score_record_pickle_file_name),
-                  'wb') as f:
-                pickle.dump(self.game_links_searched, f)
-        self.box_office_links.to_csv('{data_path}/{db_name}_backup.csv'.format(data_path=data_path, db_name=box_score_link_table_name), index=False, sep = '|')
-        self.box_office_details.to_csv('{data_path}/{db_name}_backup.csv'.format(data_path=data_path, db_name=box_score_details_table_name), index=False, sep = '|')
-        self.player_box_office_details.to_csv('{data_path}/{db_name}_backup.csv'.format(data_path=data_path, db_name=player_detail_table_name), index=False, sep = '|')
+        with file_lock:
+            with open('{data_path}/{file_name}.pkl'.format(data_path=data_path, file_name=date_record_pickle_file_name), 'wb') as f:
+                pickle.dump(self.dates_searched_for_links, f)
+            with open('{data_path}/{file_name}.pkl'.format(data_path=data_path, file_name=box_score_record_pickle_file_name),
+                      'wb') as f:
+                    pickle.dump(self.game_links_searched, f)
+            self.box_office_links.to_csv('{data_path}/{db_name}.csv'.format(data_path=data_path, db_name=box_score_link_table_name), index=False, sep = '|')
+            self.box_office_details.to_csv('{data_path}/{db_name}.csv'.format(data_path=data_path, db_name=box_score_details_table_name), index=False, sep = '|')
+            self.player_box_office_details.to_csv('{data_path}/{db_name}.csv'.format(data_path=data_path, db_name=player_detail_table_name), index=False, sep = '|')
 
     def load_data(self):
-        try:
+        with file_lock:
             with open('{data_path}/{file_name}.pkl'.format(data_path=data_path,
                                                            file_name=date_record_pickle_file_name), 'rb') as f:
                 self.dates_searched_for_links = pickle.load(f)
             with open('{data_path}/{file_name}.pkl'.format(data_path=data_path,
                                                            file_name=box_score_record_pickle_file_name),
-                      'wb') as f:
+                      'rb') as f:
                 self.game_links_searched = pickle.load(f)
 
             self.box_office_links = pd.read_csv('{data_path}/{db_name}.csv'.format(data_path=data_path, db_name=box_score_link_table_name), sep = '|')
             self.box_office_details = pd.read_csv('{data_path}/{db_name}.csv'.format(data_path=data_path, db_name=box_score_details_table_name), sep = '|')
             self.player_box_office_details = pd.read_csv('{data_path}/{db_name}.csv'.format(data_path=data_path, db_name=player_detail_table_name), sep = '|')
-        except:
-            self.box_office_links = pd.DataFrame()
-            self.box_office_details = pd.DataFrame()
-            self.player_box_office_details = pd.DataFrame()
+
 
     def scrape_current_day_boxscore_links(self):
-        padded_year = pad_num(self.current_date.year, 4)
-        padded_month = pad_num(self.current_date.month, 2)
-        padded_day = pad_num(self.current_date.day, 2)
-        game_links = []
-        url = day_scores_base_url.format(month = padded_month,
-                                   day = padded_day,
-                                   year = padded_year)
-        print('scraping links from {}'.format(url))
-        soup = get_soup(url, session = self.session)
-        games = soup.find_all('p', {'class': 'links'})
-        for i in games:
-            links = i.find_all('a')
-            days_games_box_score_links = [base_url + j['href'] for j in links if 'boxscores' in j['href'] and 'pbp' not in j['href'] and 'shot-chart' not in j['href']]
-            for j in days_games_box_score_links:
-                game_links.append({'box_score_url': j, 'year':padded_year, 'month':padded_month, 'day':padded_day})
+        for i in range(max_tries):
+            try:
+                padded_year = pad_num(self.current_date.year, 4)
+                padded_month = pad_num(self.current_date.month, 2)
+                padded_day = pad_num(self.current_date.day, 2)
+                game_links = []
+                url = day_scores_base_url.format(month = padded_month,
+                                           day = padded_day,
+                                           year = padded_year)
+                print('scraping links from {}'.format(url))
+                soup = get_soup(url, session = self.session)
+                games = soup.find_all('p', {'class': 'links'})
+                for i in games:
+                    links = i.find_all('a')
+                    days_games_box_score_links = [base_url + j['href'] for j in links if 'boxscores' in j['href'] and 'pbp' not in j['href'] and 'shot-chart' not in j['href']]
+                    for j in days_games_box_score_links:
+                        game_links.append({'box_score_url': j, 'year':padded_year, 'month':padded_month, 'day':padded_day})
 
-        new_df = pd.DataFrame.from_dict(game_links)
-        self.box_office_links = pd.concat([new_df, self.box_office_links])
-        self.box_office_links = self.box_office_links.drop_duplicates()
-
-
-
+                new_df = pd.DataFrame.from_dict(game_links)
+                self.box_office_links = pd.concat([new_df, self.box_office_links])
+                self.box_office_links = self.box_office_links.drop_duplicates()
+                break
+            except:
+                traceback.print_exc()
+                time.sleep(300)
 
     def scrape_box_office_details(self, url, year, month, day):
-        team_data = []
-        player_data = []
+        for i in range(max_tries):
+            try:
+                team_data = []
+                player_data = []
 
-        soup = get_soup(url, session=self.session)
-        soup = BeautifulSoup(str(soup).replace('-->', '').replace('<!--', ''), 'lxml')
+                soup = get_soup(url, session=self.session)
+                soup = BeautifulSoup(str(soup).replace('-->', '').replace('<!--', ''), 'lxml')
 
-        score_box = soup.find('div', {'class': 'scorebox'})
-        score_box_divs = score_box.find_all('div', recursive = False)
-        team_1 = score_box_divs[0]
-        team_2 = score_box_divs[1]
+                score_box = soup.find('div', {'class': 'scorebox'})
+                score_box_divs = score_box.find_all('div', recursive = False)
+                team_1 = score_box_divs[0]
+                team_2 = score_box_divs[1]
 
-        team_1_link = team_1.find('a', {'itemprop':'name'})['href']
-        team_2_link = team_2.find('a', {'itemprop':'name'})['href']
+                team_1_link = team_1.find('a', {'itemprop':'name'})['href']
+                team_2_link = team_2.find('a', {'itemprop':'name'})['href']
 
-        team_1_tag = team_1_link.split('/')[2].lower()
-        team_2_tag = team_2_link.split('/')[2].lower()
+                team_1_tag = team_1_link.split('/')[2].lower()
+                team_2_tag = team_2_link.split('/')[2].lower()
 
-        team_1_link = base_url + team_1_link
-        team_2_link = base_url + team_2_link
+                team_1_link = base_url + team_1_link
+                team_2_link = base_url + team_2_link
 
-        team_1_name = team_1.find('a', {'itemprop': 'name'}).get_text()
-        team_2_name = team_2.find('a', {'itemprop': 'name'}).get_text()
+                team_1_name = team_1.find('a', {'itemprop': 'name'}).get_text()
+                team_2_name = team_2.find('a', {'itemprop': 'name'}).get_text()
 
-        scorebox_meta = soup.find('div', {'class': 'scorebox_meta'}).find_all('div')
-        location = scorebox_meta[1].get_text()
+                scorebox_meta = soup.find('div', {'class': 'scorebox_meta'}).find_all('div')
+                location = scorebox_meta[1].get_text()
 
-        # data_tables = soup.find_all('table', {'class':'sortable_stats_table'})
-        team_1_basic_table = soup.find('table', {'id':'box_{tag}_basic'.format(tag = team_1_tag)})
-        team_1_advanced_table = soup.find('table', {'id':'box_{tag}_advanced'.format(tag = team_1_tag)})
-        team_2_basic_table = soup.find('table', {'id': 'box_{tag}_basic'.format(tag=team_2_tag)})
-        team_2_advanced_table = soup.find('table', {'id': 'box_{tag}_advanced'.format(tag=team_2_tag)})
+                # data_tables = soup.find_all('table', {'class':'sortable_stats_table'})
+                team_1_basic_table = soup.find('table', {'id':'box_{tag}_basic'.format(tag = team_1_tag)})
+                team_1_advanced_table = soup.find('table', {'id':'box_{tag}_advanced'.format(tag = team_1_tag)})
+                team_2_basic_table = soup.find('table', {'id': 'box_{tag}_basic'.format(tag=team_2_tag)})
+                team_2_advanced_table = soup.find('table', {'id': 'box_{tag}_advanced'.format(tag=team_2_tag)})
 
-        t1_data = process_stats_tables(team_1_basic_table, team_1_advanced_table)
-        t2_data = process_stats_tables(team_2_basic_table, team_2_advanced_table)
+                t1_data = process_stats_tables(team_1_basic_table, team_1_advanced_table)
+                t2_data = process_stats_tables(team_2_basic_table, team_2_advanced_table)
 
-        team_1_data_self = {'stat_' + str(i): j for i, j in t1_data['team_data'].items()}
-        t1_base_data = {
-                        'team_tag':team_1_tag,
-                        'team_link':team_1_link,
-                        'team_name':team_1_name,
-                        'opponent_tag':team_2_tag,
-                        'opponent_link':team_2_link,
-                        'opponent_name':team_2_name,
-                        'location':location,
-                        'win': 1 if float(t1_data['team_data']['pts']) > float(t2_data['team_data']['pts']) else 0,
-                        'year':year,
-                        'month':month,
-                        'day':day
-                        }
+                team_1_data_self = {'stat_' + str(i): j for i, j in t1_data['team_data'].items()}
+                t1_base_data = {
+                                'team_tag':team_1_tag,
+                                'team_link':team_1_link,
+                                'team_name':team_1_name,
+                                'opponent_tag':team_2_tag,
+                                'opponent_link':team_2_link,
+                                'opponent_name':team_2_name,
+                                'location':location,
+                                'win': 1 if float(t1_data['team_data']['pts']) > float(t2_data['team_data']['pts']) else 0,
+                                'year':year,
+                                'month':month,
+                                'day':day
+                                }
 
-        team_2_data_self = {'stat_' + str(i): j for i, j in t2_data['team_data'].items()}
-        t2_base_data = {
-                        'team_tag':team_2_tag,
-                        'team_link':team_2_link,
-                        'team_name':team_2_name,
-                        'opponent_tag':team_1_tag,
-                        'opponent_link':team_1_link,
-                        'opponent_name':team_1_name,
-                        'location':location,
-                        'win': 1 if float(t2_data['team_data']['pts']) > float(t1_data['team_data']['pts']) else 0,
-                        'year': year,
-                        'month': month,
-                        'day': day
-                        }
+                team_2_data_self = {'stat_' + str(i): j for i, j in t2_data['team_data'].items()}
+                t2_base_data = {
+                                'team_tag':team_2_tag,
+                                'team_link':team_2_link,
+                                'team_name':team_2_name,
+                                'opponent_tag':team_1_tag,
+                                'opponent_link':team_1_link,
+                                'opponent_name':team_1_name,
+                                'location':location,
+                                'win': 1 if float(t2_data['team_data']['pts']) > float(t1_data['team_data']['pts']) else 0,
+                                'year': year,
+                                'month': month,
+                                'day': day
+                                }
 
-        for i in t1_data['player_data'].values():
-            t1_base_data_copy = copy.deepcopy(t1_base_data)
-            t1_base_data_copy.update(i)
-            player_data.append(t1_base_data_copy)
+                for i in t1_data['player_data'].values():
+                    t1_base_data_copy = copy.deepcopy(t1_base_data)
+                    t1_base_data_copy.update(i)
+                    player_data.append(t1_base_data_copy)
 
-        for i in t2_data['player_data'].values():
-            t2_base_data_copy = copy.deepcopy(t2_base_data)
-            t2_base_data_copy.update(i)
-            player_data.append(t2_base_data_copy)
+                for i in t2_data['player_data'].values():
+                    t2_base_data_copy = copy.deepcopy(t2_base_data)
+                    t2_base_data_copy.update(i)
+                    player_data.append(t2_base_data_copy)
 
-        t1_base_data.update(team_1_data_self)
-        # t1_base_data.update(team_1_data_opponent)
-        t2_base_data.update(team_2_data_self)
-        # t2_base_data.update(team_2_data_opponent)
-        team_data.append(t1_base_data)
-        team_data.append(t2_base_data)
+                t1_base_data.update(team_1_data_self)
+                # t1_base_data.update(team_1_data_opponent)
+                t2_base_data.update(team_2_data_self)
+                # t2_base_data.update(team_2_data_opponent)
+                team_data.append(t1_base_data)
+                team_data.append(t2_base_data)
 
-        new_df = pd.DataFrame.from_dict(team_data)
-        self.box_office_details = pd.concat([new_df, self.box_office_details])
-        self.box_office_details = self.box_office_details.drop_duplicates()
+                new_df = pd.DataFrame.from_dict(team_data)
+                self.box_office_details = pd.concat([new_df, self.box_office_details])
+                self.box_office_details = self.box_office_details.drop_duplicates()
 
-        new_df = pd.DataFrame.from_dict(player_data)
-        self.player_box_office_details = pd.concat([new_df, self.player_box_office_details])
-        self.player_box_office_details = self.player_box_office_details.drop_duplicates()
+                new_df = pd.DataFrame.from_dict(player_data)
+                self.player_box_office_details = pd.concat([new_df, self.player_box_office_details])
+                self.player_box_office_details = self.player_box_office_details.drop_duplicates()
+                break
+            except:
+                traceback.print_exc()
+                time.sleep(300)
 
 
     def scrape_date_range_boxscore_links(self, save_data = False):
@@ -291,6 +293,6 @@ class Scraper:
 
 
 if __name__ == '__main__':
-    scraper = Scraper(start_date = datetime.date(1990, 1, 1), clear_data=False)
+    scraper = Scraper(start_date = datetime.date(2019, 5, 5), clear_data=True)
     scraper.scrape_date_range_boxscore_links_and_details()
 

@@ -61,13 +61,6 @@ def feature_search():
                     new_df2 = new_df.dropna()
                     print(new_df.shape, new_df2.shape)
                     slope, intercept, r_value, p_value, std_err = stats.linregress(new_df2[new_col], new_df2['win'])
-                    # print({'column':new_col,
-                    #                 'slope':slope,
-                    #                 'intercept':intercept,
-                    #                 'r_value':r_value,
-                    #                 'p_value':p_value,
-                    #                 'std_err':std_err,
-                    #                 'r2_value':r_value*r_value})
                     results.append({'column':new_col,
                                     'slope':slope,
                                     'intercept':intercept,
@@ -80,6 +73,23 @@ def feature_search():
     results_df = pd.DataFrame.from_dict(results)
     results_df = results_df.sort_values(by = 'r2_value')
     results_df.to_csv('{data_path}/feature_results.csv'.format(data_path=data_path), sep = '|', index = False)
+
+
+def generate_features(df):
+    return df
+
+def feature_evaluation():
+    rating_df = pd.read_csv(r'C:\Users\trist\Documents\nba_data\team_features.csv', sep = '|')
+    rating_df = generate_features(rating_df)
+    results = list()
+    y =  rating_df['win']
+
+    numerics = ['int16', 'int32', 'int64', 'float16', 'float32', 'float64']
+    x_df = rating_df.select_dtypes(include=numerics)
+    x_df = x_df.drop('win', axis = 1)
+
+
+
 
 '''
 observations of data ignoring opponent:
