@@ -121,19 +121,21 @@ class Scraper:
             self.player_box_office_details.to_csv('{data_path}/{db_name}.csv'.format(data_path=data_path, db_name=player_detail_table_name), index=False, sep = '|')
 
     def load_data(self):
-        with file_lock:
-            with open('{data_path}/{file_name}.pkl'.format(data_path=data_path,
-                                                           file_name=date_record_pickle_file_name), 'rb') as f:
-                self.dates_searched_for_links = pickle.load(f)
-            with open('{data_path}/{file_name}.pkl'.format(data_path=data_path,
-                                                           file_name=box_score_record_pickle_file_name),
-                      'rb') as f:
-                self.game_links_searched = pickle.load(f)
+        try:
+            with file_lock:
+                with open('{data_path}/{file_name}.pkl'.format(data_path=data_path,
+                                                               file_name=date_record_pickle_file_name), 'rb') as f:
+                    self.dates_searched_for_links = pickle.load(f)
+                with open('{data_path}/{file_name}.pkl'.format(data_path=data_path,
+                                                               file_name=box_score_record_pickle_file_name),
+                          'rb') as f:
+                    self.game_links_searched = pickle.load(f)
 
-            self.box_office_links = pd.read_csv('{data_path}/{db_name}.csv'.format(data_path=data_path, db_name=box_score_link_table_name), sep = '|')
-            self.box_office_details = pd.read_csv('{data_path}/{db_name}.csv'.format(data_path=data_path, db_name=box_score_details_table_name), sep = '|')
-            self.player_box_office_details = pd.read_csv('{data_path}/{db_name}.csv'.format(data_path=data_path, db_name=player_detail_table_name), sep = '|')
-
+                self.box_office_links = pd.read_csv('{data_path}/{db_name}.csv'.format(data_path=data_path, db_name=box_score_link_table_name), sep = '|')
+                self.box_office_details = pd.read_csv('{data_path}/{db_name}.csv'.format(data_path=data_path, db_name=box_score_details_table_name), sep = '|')
+                self.player_box_office_details = pd.read_csv('{data_path}/{db_name}.csv'.format(data_path=data_path, db_name=player_detail_table_name), sep = '|')
+        except:
+            traceback.print_exc()
 
     def scrape_current_day_boxscore_links(self):
         for i in range(max_tries):
@@ -293,6 +295,6 @@ class Scraper:
 
 
 if __name__ == '__main__':
-    scraper = Scraper(start_date = datetime.date(2019, 5, 5), clear_data=True)
+    scraper = Scraper(start_date = datetime.date(1980, 1, 1), clear_data=False)
     scraper.scrape_date_range_boxscore_links_and_details()
 

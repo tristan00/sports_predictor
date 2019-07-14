@@ -71,15 +71,14 @@ class DataManager():
         self.team_data = self.team_data.sort_values(['date_str'])
 
         self.calculate_moving_averages(1)
-        self.calculate_moving_averages(3)
         self.calculate_moving_averages(5)
         self.calculate_moving_averages(25)
-        self.calculate_moving_averages(100)
+        self.calculate_moving_averages(1000)
 
         self.calculate_game_ratings_on_subset(self.team_data, 'total_0_', rating_type = 0)
         self.calculate_game_ratings_on_subset(self.team_data, 'total_1_', rating_type = 1)
         self.calculate_game_ratings_on_subset(self.team_data, 'total_2_', rating_type = 2)
-        self.calculate_game_ratings_on_subset(self.team_data, 'total_3_', rating_type = 33)
+        self.calculate_game_ratings_on_subset(self.team_data, 'total_3_', rating_type = 3)
 
         # self.calculate_game_ratings_on_subset(self.team_data[self.team_data['stat_is_home'] == 1], 'home')
         # self.calculate_game_ratings_on_subset(self.team_data[self.team_data['stat_is_home'] == 0], 'away')

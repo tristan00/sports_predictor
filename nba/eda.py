@@ -5,7 +5,15 @@ import traceback
 import numpy as np
 from process_data import create_data_files
 from common import (data_path)
+from sklearn.ensemble import RandomForestClassifier
 
+
+numerics = ['int16', 'int32', 'int64', 'float16', 'float32', 'float64']
+target_cols = ['stat_ast', 'stat_ast_pct','stat_blk', 'stat_blk_pct','stat_def_rtg','stat_drb','stat_drb_pct','stat_efg_pct','stat_fg',
+                  'stat_fg3','stat_fg3_pct','stat_fg3a','stat_fg3a_per_fga_pct','stat_fg_pct','stat_fga','stat_ft','stat_ft_pct',
+                  'stat_fta','stat_fta_per_fga_pct','stat_mp','stat_off_rtg','stat_orb','stat_orb_pct','stat_pf','stat_plus_minus',
+                  'stat_pts','stat_stl','stat_stl_pct','stat_tov', 'stat_tov_pct', 'stat_trb','stat_trb_pct', 'stat_ts_pct',
+                  'stat_usg_pct','win']
 
 def find_team_home_loc(df):
     home_dict = dict()
@@ -51,7 +59,7 @@ def feature_search():
     results = list()
     for i in rating_df.columns:
         for j in rating_df.columns:
-            if i != 'win' and j != 'win' and i != j:
+            if i not in target_cols and j not in target_cols and i != j and rating_df[i].dtype in numerics and rating_df[j].dtype in numerics:
                 try:
                     new_col = '{}_sub_by_{}'.format(i, j)
 
@@ -76,18 +84,31 @@ def feature_search():
 
 
 def generate_features(df):
+    for i in df.columns:
+        for j in df.columns:
+            if i not in target_cols and j not in target_cols and i != j and df[i].dtype in numerics and df[j].dtype in numerics:
+                new_col = '{}_sub_by_{}'.format(i, j)
+                df[new_col] = df[i] - df[j]
     return df
 
-def feature_evaluation():
+def feature_reduction(max_features = 100):
     rating_df = pd.read_csv(r'C:\Users\trist\Documents\nba_data\team_features.csv', sep = '|')
     rating_df = generate_features(rating_df)
     results = list()
     y =  rating_df['win']
 
-    numerics = ['int16', 'int32', 'int64', 'float16', 'float32', 'float64']
     x_df = rating_df.select_dtypes(include=numerics)
-    x_df = x_df.drop('win', axis = 1)
+    x_df = x_df.drop(target_cols, axis = 1)
+    x_df = x_df.fillna(x_df.median())
 
+    rf = RandomForestClassifier(max_depth=12, n_estimators=100)
+    rf.fit(x_df, y)
+
+    features = []
+    for i, j in zip(x_df.columns, rf.feature_importances_):
+        features.append((i, j))
+    features = sorted(features, key = lambda x: x[1], reverse=True)
+    print(features)
 
 
 
@@ -102,5 +123,6 @@ Past defensive rating and turnover stats are negatively related to wins, it make
 
 
 if __name__ == '__main__':
-    create_data_files()
-    feature_search()
+    # create_data_files()
+    # feature_search()
+    feature_reduction()
