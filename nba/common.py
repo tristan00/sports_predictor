@@ -22,7 +22,6 @@ rating_floor = 100
 rating_ceiling = 10000
 rating_d = 1000
 
-
 def clean_text(s):
     return str(s).replace('|', ' ')
 
@@ -63,7 +62,7 @@ def get_soup(url, session = None, sleep = True):
     soup = BeautifulSoup(r.text)
     return soup
 
-def get_new_rating(rating1, rating2, outcome, multiplier = 1):
+def get_new_rating(rating1, rating2, outcome, multiplier = 1, rating_type = 0):
     '''
     :param rating1:
     :param rating2:
@@ -72,15 +71,34 @@ def get_new_rating(rating1, rating2, outcome, multiplier = 1):
     :return:
     '''
 
-    # expected_outcome1 = 1 / (1 + 10 ** ((rating1 - rating2) / (rating1 + rating2)))
-    # new_rating1 =  max(rating1 + (multiplier * rating_k_factor * (outcome-expected_outcome1)), rating_floor)
-    # return new_rating1
+    next_rating = starting_rating
 
-    expected_outcome = rating1 / (rating1 + rating2)
-    new_rating = rating1 + (multiplier * rating_k_factor * (outcome - expected_outcome))
-    new_rating = max(new_rating, rating_floor)
-    new_rating = min(new_rating, rating_ceiling)
-    return new_rating
+    if rating_type == 0:
+        expected_outcome = rating1 / (rating1 + rating2)
+        next_rating = rating1 + (multiplier * rating_k_factor * (outcome - expected_outcome))
+        next_rating = max(next_rating, rating_floor)
+        next_rating = min(next_rating, rating_ceiling)
+    elif rating_type == 1:
+        expected_outcome1 = 1 / (1 + 10 ** ((rating1 - rating2) / (rating1 + rating2)))
+        next_rating = min(rating_ceiling, max(rating1 + (multiplier * rating_k_factor * (outcome-expected_outcome1)), rating_floor))
+        next_rating = max(next_rating, rating_floor)
+        next_rating = min(next_rating, rating_ceiling)
+    elif rating_type == 2:
+        if outcome == 1:
+            if (rating1 + rating_k_factor) <= rating2:
+                next_rating = rating2 + rating_k_factor
+            else:
+                next_rating= rating1 + rating_k_factor
+        else:
+            if (rating2 + rating_k_factor) <= rating1:
+                next_rating = rating2 - rating_k_factor
+            else:
+                next_rating= rating1 - rating_k_factor
+        next_rating = max(next_rating, rating_floor)
+        next_rating = min(next_rating, rating_ceiling)
+    else:
+        raise NotImplemented
+    return next_rating
 
 if __name__ == '__main__':
     print(get_new_rating(1000, 100, 1))

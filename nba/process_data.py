@@ -75,7 +75,10 @@ class DataManager():
         self.calculate_moving_averages(25)
         self.calculate_moving_averages(100)
 
-        self.calculate_game_ratings_on_subset(self.team_data, 'total')
+        self.calculate_game_ratings_on_subset(self.team_data, 'total_0_', rating_type = 0)
+        self.calculate_game_ratings_on_subset(self.team_data, 'total_1_', rating_type = 1)
+        self.calculate_game_ratings_on_subset(self.team_data, 'total_2_', rating_type = 2)
+
         # self.calculate_game_ratings_on_subset(self.team_data[self.team_data['stat_is_home'] == 1], 'home')
         # self.calculate_game_ratings_on_subset(self.team_data[self.team_data['stat_is_home'] == 0], 'away')
 
@@ -104,7 +107,7 @@ class DataManager():
         df_subset['{prefix}_postgame_rating'.format(prefix=prefix)] = np.nan
 
 
-    def calculate_game_ratings_on_subset(self, df_subset, prefix):
+    def calculate_game_ratings_on_subset(self, df_subset, prefix, rating_type = 0):
         self.team_data['{prefix}_pregame_rating'.format(prefix=prefix)] = np.nan
         self.team_data['{prefix}_postgame_rating'.format(prefix=prefix)] = np.nan
         df_subset['{prefix}_pregame_rating'.format(prefix=prefix)] = np.nan
@@ -184,4 +187,3 @@ def create_data_files():
 if __name__ == '__main__':
     create_data_files()
 
-    # player_data = pd.read_csv('{data_path}/{db_name}.csv'.format(data_path=data_path, db_name=player_detail_table_name), sep = '|')
