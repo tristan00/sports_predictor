@@ -1,23 +1,19 @@
-import requests
 import datetime
-from common import pad_num, sleep_random_amount, get_session
+from common import (pad_num,
+                    sleep_random_amount,
+                    get_session,
+                    base_url,
+                    day_scores_base_url,
+                    data_path,
+                    box_score_link_table_name,
+                    box_score_details_table_name,
+                    player_detail_table_name,
+                    date_record_pickle_file_name,
+                    box_score_record_pickle_file_name)
 from bs4 import BeautifulSoup
-import sqlite3
 import pickle
 import pandas as pd
-import logging
 import copy
-
-
-base_url = 'https://www.basketball-reference.com/'
-day_scores_base_url = 'https://www.basketball-reference.com/boxscores/?month={month}&day={day}&year={year}'
-data_path = r'C:\Users\trist\Documents\nba_data'
-db_name = 'nba_db'
-box_score_link_table_name = 'boxscore_links'
-box_score_details_table_name = 'boxscore_details'
-player_detail_table_name = 'player_details'
-date_record_pickle_file_name = 'scraped_dates'
-box_score_record_pickle_file_name = 'scraped_games'
 
 
 def get_soup(url, session = None, sleep = True):
@@ -119,6 +115,15 @@ class Scraper:
         self.box_office_details.to_csv('{data_path}/{db_name}.csv'.format(data_path=data_path, db_name=box_score_details_table_name), index=False, sep = '|')
         self.player_box_office_details.to_csv('{data_path}/{db_name}.csv'.format(data_path=data_path, db_name=player_detail_table_name), index=False, sep = '|')
 
+        with open('{data_path}/{file_name}_backup.pkl'.format(data_path=data_path, file_name=date_record_pickle_file_name), 'wb') as f:
+            pickle.dump(self.dates_searched_for_links, f)
+        with open('{data_path}/{file_name}_backup.pkl'.format(data_path=data_path, file_name=box_score_record_pickle_file_name),
+                  'wb') as f:
+                pickle.dump(self.game_links_searched, f)
+        self.box_office_links.to_csv('{data_path}/{db_name}_backup.csv'.format(data_path=data_path, db_name=box_score_link_table_name), index=False, sep = '|')
+        self.box_office_details.to_csv('{data_path}/{db_name}_backup.csv'.format(data_path=data_path, db_name=box_score_details_table_name), index=False, sep = '|')
+        self.player_box_office_details.to_csv('{data_path}/{db_name}_backup.csv'.format(data_path=data_path, db_name=player_detail_table_name), index=False, sep = '|')
+
     def load_data(self):
         try:
             with open('{data_path}/{file_name}.pkl'.format(data_path=data_path,
@@ -197,8 +202,7 @@ class Scraper:
         t1_data = process_stats_tables(team_1_basic_table, team_1_advanced_table)
         t2_data = process_stats_tables(team_2_basic_table, team_2_advanced_table)
 
-        team_1_data_self = {'t1_' + str(i): j for i, j in t1_data['team_data'].items()}
-        team_1_data_opponent = {'t2_' + str(i): j for i, j in t2_data['team_data'].items()}
+        team_1_data_self = {'stat_' + str(i): j for i, j in t1_data['team_data'].items()}
         t1_base_data = {
                         'team_tag':team_1_tag,
                         'team_link':team_1_link,
@@ -213,8 +217,7 @@ class Scraper:
                         'day':day
                         }
 
-        team_2_data_self = {'t1_' + str(i): j for i, j in t2_data['team_data'].items()}
-        team_2_data_opponent = {'t2_' + str(i): j for i, j in t1_data['team_data'].items()}
+        team_2_data_self = {'stat_' + str(i): j for i, j in t2_data['team_data'].items()}
         t2_base_data = {
                         'team_tag':team_2_tag,
                         'team_link':team_2_link,
@@ -240,9 +243,9 @@ class Scraper:
             player_data.append(t2_base_data_copy)
 
         t1_base_data.update(team_1_data_self)
-        t1_base_data.update(team_1_data_opponent)
+        # t1_base_data.update(team_1_data_opponent)
         t2_base_data.update(team_2_data_self)
-        t2_base_data.update(team_2_data_opponent)
+        # t2_base_data.update(team_2_data_opponent)
         team_data.append(t1_base_data)
         team_data.append(t2_base_data)
 
@@ -288,6 +291,6 @@ class Scraper:
 
 
 if __name__ == '__main__':
-    scraper = Scraper(start_date = datetime.date(2000, 1, 1), clear_data=True)
+    scraper = Scraper(start_date = datetime.date(1990, 1, 1), clear_data=False)
     scraper.scrape_date_range_boxscore_links_and_details()
 
