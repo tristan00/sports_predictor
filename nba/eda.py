@@ -15,6 +15,8 @@ target_cols = ['stat_ast', 'stat_ast_pct','stat_blk', 'stat_blk_pct','stat_def_r
                   'stat_pts','stat_stl','stat_stl_pct','stat_tov', 'stat_tov_pct', 'stat_trb','stat_trb_pct', 'stat_ts_pct',
                   'stat_usg_pct','win']
 
+invalid_keywords = ['postgame']
+
 def find_team_home_loc(df):
     home_dict = dict()
     team_tags = set(df['team_tag'])
@@ -85,42 +87,62 @@ def feature_search():
 
 def generate_features(df):
     initial_df_shape = df.shape
+
+    post_cols = pd;.
+
     inital_df_columns = df.columns
 
     for i in inital_df_columns:
         for j in inital_df_columns:
-            if i not in target_cols and j not in target_cols and i != j and df[i].dtype in numerics and df[j].dtype in numerics:
+            if i not in target_cols and j not in target_cols and i != j and df[i].dtype in numerics and df[j].dtype in numerics and 'postgame' not in i and 'postgame' not in j:
                 print(initial_df_shape, df.shape, i, j)
                 new_col = '{}_sub_by_{}'.format(i, j)
                 df[new_col] = df[i] - df[j]
-                new_col = '{}_div_by_{}'.format(i, j)
-                df[new_col] = df[i] / df[j]
+                # new_col = '{}_div_by_{}'.format(i, j)
+                # df[new_col] = df[i] / df[j]
     return df
 
-def feature_reduction(max_features = 100):
+def feature_reduction(max_features = 100, max_perc_drop_per_iter = .01, max_features_to_drop = 1000):
     rating_df = pd.read_csv(r'C:\Users\trist\Documents\nba_data\team_features.csv', sep = '|')
-    rating_df.sample(n = 500)
     rating_df = generate_features(rating_df)
-    results = list()
-    y =  rating_df['win']
+    cols_to_drop = []
 
-    x_df = rating_df.select_dtypes(include=numerics)
-    x_df = x_df.drop(target_cols, axis = 1)
+    features = rating_df.columns.tolist()
 
-    x_df = x_df.replace(np.inf, np.nan)
-    x_df = x_df.replace(-np.inf, np.nan)
-    x_df = x_df.fillna(x_df.median())
+    while len(features) > max_features:
+        results = list()
+        y =  rating_df['win']
 
-    rf = RandomForestClassifier(max_depth=12, n_estimators=1000, n_jobs=-1)
-    rf.fit(x_df, y)
+        x_df = rating_df.select_dtypes(include=numerics)
+        x_df = x_df.drop(target_cols, axis = 1)
+        if cols_to_drop:
+            x_df = x_df.drop(cols_to_drop, axis=1)
 
-    features = []
-    for i, j in zip(x_df.columns, rf.feature_importances_):
-        features.append((i, j))
-    features = sorted(features, key = lambda x: x[1], reverse=True)
+        x_df = x_df.replace(np.inf, np.nan)
+        x_df = x_df.replace(-np.inf, np.nan)
+        x_df = x_df.replace(np.nan, 0)
+
+        rf = RandomForestClassifier(max_depth=12, n_estimators=1000, n_jobs=-1)
+        rf.fit(x_df, y)
+
+
+        num_of_features_to_drop = min(max_features_to_drop, int(len(features)*.01))
+
+
+        features = []
+        for i, j in zip(x_df.columns, rf.feature_importances_):
+            features.append((i, j))
+        features = sorted(features, key = lambda x: x[1], reverse=True)
+
+        new_features_to_drop = []
+        new_features_to_drop.extend([i[0] for i in features if i[1] == 0])
+        new_features_to_drop.extend([i[0] for i in features[-num_of_features_to_drop:]])
+        cols_to_drop.extend(new_features_to_drop)
+
+        print(features[:100])
+        features = [i for i in features if i[0] not in cols_to_drop]
+    features = [i[0] for i in features if i[0] not in cols_to_drop]
     print(features)
-
-
 
 '''
 observations of data ignoring opponent:
