@@ -88,7 +88,7 @@ def feature_search():
 def generate_features(df):
     initial_df_shape = df.shape
 
-    post_cols = pd;.
+    # post_cols = pd;.
 
     inital_df_columns = df.columns
 
