@@ -1,6 +1,6 @@
 import pandas as pd
 import numpy as np
-from common import (
+from nba.common import (
                     data_path,
                     box_score_link_table_name,
                     box_score_details_table_name,

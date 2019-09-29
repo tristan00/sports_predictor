@@ -2,11 +2,7 @@
 <project version="4">
   <component name="ChangeListManager">
     <list default="true" id="72ae0748-0dd4-40fc-9969-f96d9ad4e734" name="Default Changelist" comment="">
-      <change afterPath="$PROJECT_DIR$/.idea/inspectionProfiles/Project_Default.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/misc.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/misc.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/mma_predictor.iml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/mma_predictor.iml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/nba/eda.py" beforeDir="false" afterPath="$PROJECT_DIR$/nba/eda.py" afterDir="false" />
     </list>
     <option name="EXCLUDED_CONVERTED_TO_IGNORED" value="true" />
     <option name="SHOW_DIALOG" value="false" />
@@ -49,14 +45,16 @@
   <component name="PropertiesComponent">
     <property name="SHARE_PROJECT_CONFIGURATION_FILES" value="true" />
     <property name="last_opened_file_path" value="$PROJECT_DIR$" />
-    <property name="settings.editor.selected.configurable" value="com.jetbrains.python.configuration.PythonContentEntriesConfigurable" />
+    <property name="settings.editor.selected.configurable" value="com.jetbrains.python.configuration.PyActiveSdkModuleConfigurable" />
   </component>
   <component name="RecentsManager">
+    <key name="MoveFile.RECENT_KEYS">
+      <recent name="$PROJECT_DIR$/fighting" />
+      <recent name="$PROJECT_DIR$/fighting/archive" />
+      <recent name="C:\Users\trist\PycharmProjects\mma_predictor\fighting" />
+    </key>
     <key name="CopyFile.RECENT_KEYS">
       <recent name="C:\Users\trist\PycharmProjects\mma_predictor\nba" />
-    </key>
-    <key name="MoveFile.RECENT_KEYS">
-      <recent name="C:\Users\trist\PycharmProjects\mma_predictor\fighting" />
     </key>
   </component>
   <component name="RunDashboard">
@@ -71,7 +69,7 @@
       </list>
     </option>
   </component>
-  <component name="RunManager" selected="Python.eda">
+  <component name="RunManager" selected="Python.nba_scraper">
     <configuration name="common" type="PythonConfigurationType" factoryName="Python" temporary="true">
       <module name="mma_predictor" />
       <option name="INTERPRETER_OPTIONS" value="" />
@@ -84,7 +82,7 @@
       <option name="IS_MODULE_SDK" value="true" />
       <option name="ADD_CONTENT_ROOTS" value="true" />
       <option name="ADD_SOURCE_ROOTS" value="true" />
-      <option name="SCRIPT_NAME" value="$PROJECT_DIR$/nba/common.py" />
+      <option name="SCRIPT_NAME" value="$PROJECT_DIR$/common.py" />
       <option name="PARAMETERS" value="" />
       <option name="SHOW_COMMAND_LINE" value="false" />
       <option name="EMULATE_TERMINAL" value="false" />
@@ -158,8 +156,8 @@
     </configuration>
     <recent_temporary>
       <list>
-        <item itemvalue="Python.eda" />
         <item itemvalue="Python.nba_scraper" />
+        <item itemvalue="Python.eda" />
         <item itemvalue="Python.process_data" />
         <item itemvalue="Python.common" />
       </list>

@@ -1,5 +1,5 @@
 import datetime
-from common import (pad_num,
+from nba.common import (pad_num,
                     sleep_on_error,
                     sleep_normal,
                     get_session,
