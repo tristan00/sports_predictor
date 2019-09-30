@@ -1,6 +1,5 @@
 import datetime
-from nba.common import (pad_num,
-                    sleep_on_error,
+from nba.common import (sleep_on_error,
                     sleep_normal,
                     get_session,
                     base_url,
@@ -20,7 +19,7 @@ import pandas as pd
 import copy
 import time
 import traceback
-
+import re
 
 def get_soup(url, session = None, sleep = True):
     if sleep:
@@ -88,6 +87,12 @@ def process_stats_tables(t_basic, t_advanced):
     return {'player_data': player_data, 'team_data': team_data}
 
 
+def get_score_table(soup, tag, simplicity):
+    pattern = 'box[-_]+{tag}.+{simplicity}'.format(tag = tag.upper(), simplicity = simplicity)
+    table = soup.find('table', {'id':re.compile(pattern)})
+    return table
+
+
 class Scraper:
     def __init__(self, start_date = None, end_date = None, clear_data = False):
         self.end_date = end_date
@@ -142,9 +147,9 @@ class Scraper:
     def scrape_current_day_boxscore_links(self):
         for i in range(max_tries):
             try:
-                padded_year = pad_num(self.current_date.year, 4)
-                padded_month = pad_num(self.current_date.month, 2)
-                padded_day = pad_num(self.current_date.day, 2)
+                padded_year = str(self.current_date.year).zfill(4)
+                padded_month = str(self.current_date.month).zfill(2)
+                padded_day = str(self.current_date.day).zfill(2)
                 game_links = []
                 url = day_scores_base_url.format(month = padded_month,
                                            day = padded_day,
@@ -195,11 +200,12 @@ class Scraper:
                 scorebox_meta = soup.find('div', {'class': 'scorebox_meta'}).find_all('div')
                 location = scorebox_meta[1].get_text()
 
-                # data_tables = soup.find_all('table', {'class':'sortable_stats_table'})
-                team_1_basic_table = soup.find('table', {'id':'box_{tag}_basic'.format(tag = team_1_tag)})
-                team_1_advanced_table = soup.find('table', {'id':'box_{tag}_advanced'.format(tag = team_1_tag)})
-                team_2_basic_table = soup.find('table', {'id': 'box_{tag}_basic'.format(tag=team_2_tag)})
-                team_2_advanced_table = soup.find('table', {'id': 'box_{tag}_advanced'.format(tag=team_2_tag)})
+                data_tables = soup.find_all('table', {'class':'sortable stats_table'})
+                # print(data_tables)
+                team_1_basic_table = get_score_table(soup, team_1_tag, 'basic')
+                team_1_advanced_table = get_score_table(soup, team_1_tag, 'advanced')
+                team_2_basic_table = get_score_table(soup, team_2_tag, 'basic')
+                team_2_advanced_table = get_score_table(soup, team_2_tag, 'advanced')
 
                 t1_data = process_stats_tables(team_1_basic_table, team_1_advanced_table)
                 t2_data = process_stats_tables(team_2_basic_table, team_2_advanced_table)
@@ -297,6 +303,6 @@ class Scraper:
 
 
 if __name__ == '__main__':
-    scraper = Scraper(start_date = datetime.date(1980, 1, 1), clear_data=False)
+    scraper = Scraper(start_date = datetime.date(1980, 1, 1), end_date = datetime.date(2019, 1, 1), clear_data=False)
     scraper.scrape_date_range_boxscore_links_and_details()
 

@@ -3,6 +3,9 @@
   <component name="ChangeListManager">
     <list default="true" id="72ae0748-0dd4-40fc-9969-f96d9ad4e734" name="Default Changelist" comment="">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/nba/common.py" beforeDir="false" afterPath="$PROJECT_DIR$/nba/common.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/nba/nba_scraper.py" beforeDir="false" afterPath="$PROJECT_DIR$/nba/nba_scraper.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/nba/process_data.py" beforeDir="false" afterPath="$PROJECT_DIR$/nba/process_data.py" afterDir="false" />
     </list>
     <option name="EXCLUDED_CONVERTED_TO_IGNORED" value="true" />
     <option name="SHOW_DIALOG" value="false" />
@@ -20,24 +23,6 @@
       </list>
     </option>
   </component>
-  <component name="FindInProjectRecents">
-    <findStrings>
-      <find>line_score</find>
-      <find>suppress_all sortable stats_table</find>
-      <find>t1</find>
-      <find>sleep_random_amount</find>
-      <find>_stat_</find>
-      <find>get_new_rating</find>
-      <find>Beau</find>
-      <find>sleep</find>
-      <find>numeric</find>
-      <find>sub</find>
-    </findStrings>
-    <replaceStrings>
-      <replace>t2</replace>
-      <replace>_</replace>
-    </replaceStrings>
-  </component>
   <component name="Git.Settings">
     <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
   </component>
@@ -49,6 +34,7 @@
   </component>
   <component name="RecentsManager">
     <key name="MoveFile.RECENT_KEYS">
+      <recent name="$PROJECT_DIR$" />
       <recent name="$PROJECT_DIR$/fighting" />
       <recent name="$PROJECT_DIR$/fighting/archive" />
       <recent name="C:\Users\trist\PycharmProjects\mma_predictor\fighting" />
@@ -69,7 +55,7 @@
       </list>
     </option>
   </component>
-  <component name="RunManager" selected="Python.nba_scraper">
+  <component name="RunManager" selected="Python.process_data">
     <configuration name="common" type="PythonConfigurationType" factoryName="Python" temporary="true">
       <module name="mma_predictor" />
       <option name="INTERPRETER_OPTIONS" value="" />
@@ -156,9 +142,9 @@
     </configuration>
     <recent_temporary>
       <list>
+        <item itemvalue="Python.process_data" />
         <item itemvalue="Python.nba_scraper" />
         <item itemvalue="Python.eda" />
-        <item itemvalue="Python.process_data" />
         <item itemvalue="Python.common" />
       </list>
     </recent_temporary>
@@ -196,21 +182,6 @@
           <option name="timeStamp" value="40" />
         </line-breakpoint>
         <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
-          <url>file://$PROJECT_DIR$/nba/process_data.py</url>
-          <line>86</line>
-          <option name="timeStamp" value="63" />
-        </line-breakpoint>
-        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
-          <url>file://$PROJECT_DIR$/nba/process_data.py</url>
-          <line>184</line>
-          <option name="timeStamp" value="67" />
-        </line-breakpoint>
-        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
-          <url>file://$PROJECT_DIR$/nba/nba_scraper.py</url>
-          <line>300</line>
-          <option name="timeStamp" value="70" />
-        </line-breakpoint>
-        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
           <url>file://$PROJECT_DIR$/nba/eda.py</url>
           <line>65</line>
           <option name="timeStamp" value="71" />
@@ -219,6 +190,26 @@
           <url>file://$PROJECT_DIR$/nba/eda.py</url>
           <line>125</line>
           <option name="timeStamp" value="72" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
+          <url>file://$PROJECT_DIR$/nba/process_data.py</url>
+          <line>85</line>
+          <option name="timeStamp" value="73" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
+          <url>file://$PROJECT_DIR$/nba/nba_scraper.py</url>
+          <line>209</line>
+          <option name="timeStamp" value="74" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
+          <url>file://$PROJECT_DIR$/nba/process_data.py</url>
+          <line>116</line>
+          <option name="timeStamp" value="77" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
+          <url>file://$PROJECT_DIR$/nba/process_data.py</url>
+          <line>131</line>
+          <option name="timeStamp" value="78" />
         </line-breakpoint>
       </breakpoints>
       <default-breakpoints>
