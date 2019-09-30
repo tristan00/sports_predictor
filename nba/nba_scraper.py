@@ -269,7 +269,6 @@ class Scraper:
                 traceback.print_exc()
                 sleep_on_error()
 
-
     def scrape_date_range_boxscore_links(self, save_data = False):
         while self.current_date <= self.end_date and self.current_date >= self.start_date:
             self.current_date -= datetime.timedelta(days=1)
@@ -279,7 +278,6 @@ class Scraper:
             self.dates_searched_for_links.append(str(self.current_date))
             if save_data:
                 self.save_data()
-
 
     def scrape_all_box_office_details(self, save_data = False):
         for _, i in self.box_office_links.iterrows():

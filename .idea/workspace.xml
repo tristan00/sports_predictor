@@ -3,7 +3,6 @@
   <component name="ChangeListManager">
     <list default="true" id="72ae0748-0dd4-40fc-9969-f96d9ad4e734" name="Default Changelist" comment="">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/nba/common.py" beforeDir="false" afterPath="$PROJECT_DIR$/nba/common.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/nba/nba_scraper.py" beforeDir="false" afterPath="$PROJECT_DIR$/nba/nba_scraper.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/nba/process_data.py" beforeDir="false" afterPath="$PROJECT_DIR$/nba/process_data.py" afterDir="false" />
     </list>
@@ -192,24 +191,14 @@
           <option name="timeStamp" value="72" />
         </line-breakpoint>
         <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
-          <url>file://$PROJECT_DIR$/nba/process_data.py</url>
-          <line>85</line>
-          <option name="timeStamp" value="73" />
-        </line-breakpoint>
-        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
           <url>file://$PROJECT_DIR$/nba/nba_scraper.py</url>
           <line>209</line>
           <option name="timeStamp" value="74" />
         </line-breakpoint>
         <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
           <url>file://$PROJECT_DIR$/nba/process_data.py</url>
-          <line>116</line>
-          <option name="timeStamp" value="77" />
-        </line-breakpoint>
-        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
-          <url>file://$PROJECT_DIR$/nba/process_data.py</url>
-          <line>131</line>
-          <option name="timeStamp" value="78" />
+          <line>138</line>
+          <option name="timeStamp" value="79" />
         </line-breakpoint>
       </breakpoints>
       <default-breakpoints>
