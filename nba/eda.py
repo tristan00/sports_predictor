@@ -5,6 +5,8 @@ import traceback
 import numpy as np
 from process_sherdog_data import create_data_files
 from common import (data_path)
+from nba.process_data import create_data_files
+from nba.common import (data_path)
 from sklearn.ensemble import RandomForestClassifier
 
 
@@ -88,7 +90,7 @@ def feature_search():
 def generate_features(df):
     initial_df_shape = df.shape
 
-    post_cols = pd;.
+    # post_cols = pd;.
 
     inital_df_columns = df.columns
 

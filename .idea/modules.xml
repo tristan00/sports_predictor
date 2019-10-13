@@ -2,10 +2,7 @@
 <project version="4">
   <component name="ProjectModuleManager">
     <modules>
-      <module fileurl="file://$PROJECT_DIR$/../Website_analysis/.idea/Website_analysis.iml" filepath="$PROJECT_DIR$/../Website_analysis/.idea/Website_analysis.iml" />
-      <module fileurl="file://$PROJECT_DIR$/../garmin-connect-export/.idea/garmin-connect-export.iml" filepath="$PROJECT_DIR$/../garmin-connect-export/.idea/garmin-connect-export.iml" />
       <module fileurl="file://$PROJECT_DIR$/.idea/mma_predictor.iml" filepath="$PROJECT_DIR$/.idea/mma_predictor.iml" />
-      <module fileurl="file://$PROJECT_DIR$/../test_private/.idea/test_private.iml" filepath="$PROJECT_DIR$/../test_private/.idea/test_private.iml" />
     </modules>
   </component>
 </project>

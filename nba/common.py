@@ -4,13 +4,12 @@ import requests
 from bs4 import BeautifulSoup
 import threading
 
-mma_data_location = r'C:\Users\trist\OneDrive\Desktop\mma_data'
-boxing_data_location = r'C:\Users\trist\OneDrive\Desktop\boxing_data'
+
 
 
 base_url = 'https://www.basketball-reference.com/'
 day_scores_base_url = 'https://www.basketball-reference.com/boxscores/?month={month}&day={day}&year={year}'
-data_path = r'C:\Users\trist\Documents\nba_data'
+data_path = r'/media/td/Samsung_T5/sports/nba'
 db_name = 'nba_db'
 box_score_link_table_name = 'boxscore_links'
 box_score_details_table_name = 'boxscore_details'
@@ -18,7 +17,7 @@ player_detail_table_name = 'player_details'
 date_record_pickle_file_name = 'scraped_dates'
 box_score_record_pickle_file_name = 'scraped_games'
 max_tries = 5
-file_lock = threading.Lock()# not tested yet
+file_lock = threading.Lock()
 
 starting_rating = 1000
 rating_k_factor = 100
@@ -34,11 +33,11 @@ def clean_text(s):
 
 
 def sleep_on_error():
-    sleep_random_amount(min_time=1800, max_time=3600)
+    sleep_random_amount(min_time=300.0, max_time=600.0)
 
 
 def sleep_normal():
-    sleep_random_amount(min_time=.1, max_time=1.0)
+    sleep_random_amount(min_time=1.0, max_time=2.0)
 
 
 def sleep_random_amount(min_time=.05, max_time=.2, mu=None, sigma=1.0, verbose=False):
@@ -51,13 +50,6 @@ def sleep_random_amount(min_time=.05, max_time=.2, mu=None, sigma=1.0, verbose=F
     if verbose:
         print('Sleeping for {0} seconds: {0}'.format(sleep_time))
     time.sleep(sleep_time)
-
-
-def pad_num(n, length):
-    n_str = str(n)
-    while len(n_str) < length:
-        n_str = '0' + n_str
-    return n_str
 
 
 def get_session():
