@@ -3,7 +3,7 @@ from collections import Counter
 from scipy import stats
 import traceback
 import numpy as np
-from process_data import create_data_files
+from process_sherdog_data import create_data_files
 from common import (data_path)
 from sklearn.ensemble import RandomForestClassifier
 
