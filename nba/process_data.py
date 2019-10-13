@@ -11,7 +11,7 @@ from nba.common import (
                     )
 # import multiprocessing
 from collections import Counter
-
+import tqdm
 
 def find_team_home_loc(df):
     home_dict = dict()
@@ -84,7 +84,7 @@ class DataManager():
         self.team_data[f'{self.feature_indicator_str }_{self.team_str}_{self.pregame_rating_str}_{rating_type}'] = None
         self.team_data[f'{self.feature_indicator_str }_{self.team_str}_{self.postgame_rating_str}_{rating_type}'] = None
 
-        for i, r in self.team_data.iterrows():
+        for i, r in tqdm.tqdm(self.team_data.iterrows()):
             team_previous_record = self.get_most_recent_team_record_before_date(r['team_tag'], r['date_str'])
             opponent_previous_record = self.get_most_recent_team_record_before_date(r['opponent_tag'], r['date_str'])
 
@@ -97,7 +97,7 @@ class DataManager():
                 opponent_previous_rating = starting_rating
             else:
                 opponent_previous_rating = opponent_previous_record[f'{self.feature_indicator_str }_{self.team_str}_{self.postgame_rating_str}_{rating_type}']
-
+            self.team_data.loc[i, f'{self.feature_indicator_str }_{self.team_str}_{self.pregame_rating_str}_{rating_type}'] = team_previous_rating
             self.team_data.loc[i, f'{self.feature_indicator_str }_{self.team_str}_{self.postgame_rating_str}_{rating_type}'] = get_new_rating(team_previous_rating,
                                                                                                                                    opponent_previous_rating,
                                                                                                                                    r['win'], multiplier = 1, rating_type = 0)
@@ -136,7 +136,8 @@ def create_data_files():
 
     dm = DataManager(team_data, player_data)
     dm.create_team_features()
-    dm
+    df = dm.team_data.sort_values('feature_team_postgame_rating_1')
+    df.describe()
 
 if __name__ == '__main__':
     create_data_files()

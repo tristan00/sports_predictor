@@ -3,7 +3,6 @@
   <component name="ChangeListManager">
     <list default="true" id="72ae0748-0dd4-40fc-9969-f96d9ad4e734" name="Default Changelist" comment="">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/nba/nba_scraper.py" beforeDir="false" afterPath="$PROJECT_DIR$/nba/nba_scraper.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/nba/process_data.py" beforeDir="false" afterPath="$PROJECT_DIR$/nba/process_data.py" afterDir="false" />
     </list>
     <option name="EXCLUDED_CONVERTED_TO_IGNORED" value="true" />
@@ -197,8 +196,8 @@
         </line-breakpoint>
         <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
           <url>file://$PROJECT_DIR$/nba/process_data.py</url>
-          <line>138</line>
-          <option name="timeStamp" value="79" />
+          <line>139</line>
+          <option name="timeStamp" value="80" />
         </line-breakpoint>
       </breakpoints>
       <default-breakpoints>
