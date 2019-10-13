@@ -132,7 +132,7 @@ def scrape_url(url):
             'fighter_urls': fighter_urls}
 
 
-def run_scrape(run_id = None, max_batch_size=10):
+def run_scrape(run_id = None, max_batch_size=1000):
     if not run_id:
         now = datetime.datetime.now()
         run_id = now.strftime('%Y-%m-%d_%H-%M-%S')

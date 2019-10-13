@@ -13,8 +13,8 @@ import operator
 from sklearn.preprocessing import LabelEncoder
 import pickle
 import os
-
-
+from scipy import stats
+from sklearn.ensemble import RandomForestRegressor
 nan_cat = 'nan_cat'
 
 #######################################################################################################################
@@ -275,9 +275,9 @@ def calculate_all_ratings(run_id, min_perc = .1):
     df = df.sort_values('fight_dt')
     rating_dfs = []
 
-    df_copy = df.copy()
-    rating_dfs.append(calculate_rating(df, df_copy, 'all', rating_type = 0))
-    rating_dfs.append(calculate_rating(df, df_copy, 'all', rating_type = 1))
+    # df_copy = df.copy()
+    # rating_dfs.append(calculate_rating(df, df_copy, 'all', rating_type = 0))
+    # rating_dfs.append(calculate_rating(df, df_copy, 'all', rating_type = 1))
 
     rating_subsets = ['method_details', 'event_org', 'general_method']
     for s in rating_subsets:
@@ -316,6 +316,14 @@ def build_personal_features(df):
     df['height_diff'] = df['fighter_height_m'] - df['opponent_height_m']
 
     feature_cols = ['is_same_nationality', 'fighter_age', 'opponent_age', 'age_diff', 'height_diff']
+    return df, feature_cols
+
+
+def build_date_features(df):
+    df['fight_day_of_week'] = df['fight_dt'].dt.dayofweek
+    df['fight_year'] = df['fight_dt'].dt.year
+    df['fight_month'] = df['fight_dt'].dt.month
+    feature_cols = ['is_same_nationality', 'fighter_age', 'opponent_age']
     return df, feature_cols
 
 
@@ -362,7 +370,7 @@ def label_encode_cat_cols(df, run_id):
 def get_ratings(df, run_id):
     output_folder = f'{base_output_folder}/{run_id}'
     rating_df = pd.read_csv(f'{output_folder}/fighter_ratings.csv', sep = '|')
-    rating_cols = [i for i in rating_df.columns if i not in df.columns]
+    rating_cols = [i for i in rating_df.columns if i not in df.columns and 'pre_fight' in i]
     df = df.merge(rating_df)
     return df, rating_cols
 
@@ -406,9 +414,40 @@ def feature_extraction(run_id):
     targets.to_csv(f'{output_folder}/target.csv', index = False, sep = '|')
 
 
+def feature_evaluation(run_id):
+    output_folder = f'{base_output_folder}/{run_id}'
+    x_df = pd.read_csv(f'{output_folder}/features.csv', sep='|')
+    y_df = pd.read_csv(f'{output_folder}/features.csv', sep='|')
+
+    x_df = x_df.sort_values('record_id')
+    y_df = y_df.sort_values('record_id')
+
+    x_df = x_df.drop('record_id', axis = 1)
+    y = y_df['result']
+
+    feature_evaluation = dict()
+    for c in x_df.columns:
+        slope, intercept, r_value, p_value, std_err = stats.linregress(x_df[c], y)
+        feature_evaluation[c] = {'column': c,
+                                 'slope':slope,
+                                 'intercept': intercept,
+                                 'r_value': r_value,
+                                 'p_value': p_value,
+                                 'std_err': std_err
+                                 }
+
+    rf = RandomForestRegressor()
+    rf.fit(x_df, y)
+    for c, v in zip(x_df.columns, rf.feature_importances_):
+        feature_evaluation[c]['tree_model_gain'] = v
+
+    feature_evaluation_df = pd.DataFrame.from_dict(list(feature_evaluation.values()))
+    feature_evaluation_df.to_csv(f'{output_folder}/feature_evaluation.csv', index = False, sep = '|')
+
 
 if __name__ == '__main__':
     run_id = '2019-10-12_16-19-56'
     prepare_data(run_id=run_id)
     calculate_all_ratings(run_id=run_id)
     feature_extraction(run_id=run_id)
+    feature_evaluation(run_id=run_id)
