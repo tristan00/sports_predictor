@@ -2,7 +2,6 @@ import requests
 from bs4 import BeautifulSoup
 from urllib import parse
 from common import (get_soup, get_session)
-import scrapy
 import copy
 import datetime
 import os
@@ -15,7 +14,7 @@ import pickle
 
 
 base_url = 'https://www.sherdog.com/'
-base_output_folder = r'E:\sports\mma\sherdog_data'
+base_output_folder = r'/media/td/Samsung_T5/sports/mma/sherdog_data'
 
 initial_url = {'https://www.sherdog.com/fighter/Amanda-Nunes-31496',
                'https://www.sherdog.com/fighter/Jon-Jones-27944'
@@ -132,7 +131,7 @@ def scrape_url(url):
             'fighter_urls': fighter_urls}
 
 
-def run_scrape(run_id = None, max_batch_size=1000):
+def run_scrape(run_id = None, max_batch_size=100):
     if not run_id:
         now = datetime.datetime.now()
         run_id = now.strftime('%Y-%m-%d_%H-%M-%S')

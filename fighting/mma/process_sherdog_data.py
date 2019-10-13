@@ -275,13 +275,16 @@ def calculate_all_ratings(run_id, min_perc = .1):
     df = df.sort_values('fight_dt')
     rating_dfs = []
 
-    # df_copy = df.copy()
-    # rating_dfs.append(calculate_rating(df, df_copy, 'all', rating_type = 0))
-    # rating_dfs.append(calculate_rating(df, df_copy, 'all', rating_type = 1))
+    df_copy = df.copy()
+    rating_dfs.append(calculate_rating(df, df_copy, 'all', rating_type = 0))
+    rating_dfs.append(calculate_rating(df, df_copy, 'all', rating_type = 1))
 
     rating_subsets = ['method_details', 'event_org', 'general_method']
     for s in rating_subsets:
         value_counts_series = df[s].value_counts(normalize=True)
+        print()
+        print(dict(value_counts_series))
+        print()
         for k, v in zip(value_counts_series.index, value_counts_series):
             if v > min_perc:
                 df_sub = df[df[s] == k].copy()
@@ -289,6 +292,8 @@ def calculate_all_ratings(run_id, min_perc = .1):
                 col_name = clean_text(col_name).replace(' ', '_')
                 rating_dfs.append(calculate_rating(df, df_sub, col_name, rating_type = 0))
                 rating_dfs.append(calculate_rating(df, df_sub, col_name, rating_type = 1))
+
+
 
     out_df = functools.reduce(pd.merge, rating_dfs)
     out_df.to_csv(f'{output_folder}/fighter_ratings.csv', sep = '|', index = False)
@@ -308,7 +313,7 @@ def get_age(birth_date, current_date):
         return (current_dt - birth_dt).days
 
 
-def build_personal_features(df):
+def get_personal_features(df):
     df['is_same_nationality'] = df.apply(lambda x: int(x['fighter_nationality'] == x['opponent_nationality']), axis = 1)
     df['fighter_age'] = df.apply(lambda x: get_age(x['fighter_birth_dt'], x['fight_dt']), axis=1)
     df['opponent_age'] = df.apply(lambda x: get_age(x['opponent_birth_dt'], x['fight_dt']), axis=1)
@@ -319,19 +324,28 @@ def build_personal_features(df):
     return df, feature_cols
 
 
-def build_date_features(df):
-    df['fight_day_of_week'] = df['fight_dt'].dt.dayofweek
-    df['fight_year'] = df['fight_dt'].dt.year
-    df['fight_month'] = df['fight_dt'].dt.month
+def get_date_features(df):
+    df['fight_dt2'] = pd.to_datetime(df['fight_dt'], errors='coerce')
+    df['fight_day_of_week'] = df['fight_dt2'].dt.dayofweek
+    df['fight_year'] = df['fight_dt2'].dt.year
+    df['fight_month'] = df['fight_dt2'].dt.month
     feature_cols = ['is_same_nationality', 'fighter_age', 'opponent_age']
     return df, feature_cols
 
 
-def build_moving_avg_features(df):
+def get_fight_timing_features(df):
+    df['fight_dt2'] = pd.to_datetime(df['fight_dt'], errors='coerce')
+    df = df.sort_values('fight_dt2')
+    df['date_diff'] = df.groupby('fighter_id')['fight_dt2'].diff().dt.days
+    feature_cols = ['date_diff']
+    return df, feature_cols
+
+
+def get_moving_avg_features(df):
     added_cols = set()
 
     mov_avg_cols_cat_cols = ['general_method']
-    mov_avg_cols = ['fight_end_time', 'result', 'fight_end_round']
+    mov_avg_cols = ['fight_end_time', 'result', 'fight_end_round', 'date_diff']
     window_sizes = [1, 3,  5, 10]
 
     fighter_ids = set(df['fighter_id'])
@@ -363,10 +377,6 @@ def build_moving_avg_features(df):
     return df, list(added_cols)
 
 
-def label_encode_cat_cols(df, run_id):
-    pass
-
-
 def get_ratings(df, run_id):
     output_folder = f'{base_output_folder}/{run_id}'
     rating_df = pd.read_csv(f'{output_folder}/fighter_ratings.csv', sep = '|')
@@ -389,15 +399,29 @@ def feature_extraction(run_id):
     df = df.sort_values('fight_dt')
     print(1)
 
-    feature_cols = []
-    df, cols = build_personal_features(df)
-    feature_cols.extend(cols)
+    print(df.shape)
 
-    df, cols = build_moving_avg_features(df)
+    feature_cols = []
+
+    df, cols = get_date_features(df)
     feature_cols.extend(cols)
+    print(df.shape)
+
+    df, cols = get_fight_timing_features(df)
+    feature_cols.extend(cols)
+    print(df.shape)
+
+    df, cols = get_personal_features(df)
+    feature_cols.extend(cols)
+    print(df.shape)
+
+    df, cols = get_moving_avg_features(df)
+    feature_cols.extend(cols)
+    print(df.shape)
 
     df, cols = get_ratings(df, run_id)
     feature_cols.extend(cols)
+    print(df.shape)
 
     df = df.reset_index()
     df['record_id'] = df.index
@@ -417,13 +441,15 @@ def feature_extraction(run_id):
 def feature_evaluation(run_id):
     output_folder = f'{base_output_folder}/{run_id}'
     x_df = pd.read_csv(f'{output_folder}/features.csv', sep='|')
-    y_df = pd.read_csv(f'{output_folder}/features.csv', sep='|')
+    y_df = pd.read_csv(f'{output_folder}/target.csv', sep='|')
 
     x_df = x_df.sort_values('record_id')
     y_df = y_df.sort_values('record_id')
 
     x_df = x_df.drop('record_id', axis = 1)
     y = y_df['result']
+
+    x_df = x_df.fillna(x_df.median())
 
     feature_evaluation = dict()
     for c in x_df.columns:
