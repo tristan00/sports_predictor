@@ -12,16 +12,23 @@ import time
 import random
 import pickle
 
-
 base_url = 'https://www.sherdog.com/'
 base_output_folder = r'/media/td/Samsung_T5/sports/mma/sherdog_data'
 
-initial_url = {'https://www.sherdog.com/fighter/Amanda-Nunes-31496',
-               'https://www.sherdog.com/fighter/Jon-Jones-27944'
+initial_url = {'https://www.sherdog.com/fighter/Henry-Cejudo-125297',
+               'https://www.sherdog.com/fighter/Max-Holloway-38671',
+               'https://www.sherdog.com/fighter/Khabib-Nurmagomedov-56035',
+               'https://www.sherdog.com/fighter/Kamaru-Usman-120691',
+               'https://www.sherdog.com/fighter/Israel-Adesanya-56374',
+               'https://www.sherdog.com/fighter/Jon-Jones-27944',
+               'https://www.sherdog.com/fighter/Stipe-Miocic-39537',
+               'https://www.sherdog.com/fighter/Weili-Zhang-186663',
+               'https://www.sherdog.com/fighter/Valentina-Shevchenko-45384',
+               'https://www.sherdog.com/fighter/Amanda-Nunes-31496'
                }
 
 
-def scrape_url(url):
+def scrape_url(url, iteration):
     fighter_urls = set()
     soup = get_soup(url)
 
@@ -42,6 +49,7 @@ def scrape_url(url):
         personal_dict['sherdog_description'] = description_meta_soup.getText()
 
     personal_dict['fighter_id'] = url
+    personal_dict['scrape_iteration'] = iteration
 
     if bio_soup:
         birth_date_soup = bio_soup.find('span', {'itemprop': 'birthDate'})
@@ -63,6 +71,7 @@ def scrape_url(url):
     fights = list()
 
     sections = soup.find_all('section')
+    fight_counter = 0
     for section in sections:
 
         fight_type_text = ''
@@ -123,19 +132,44 @@ def scrape_url(url):
                                   'method': method,
                                   'fight_end_round': fight_end_round,
                                   'fight_end_time': fight_end_time,
-                                  'fight_type_text': fight_type_text
+                                  'fight_type_text': fight_type_text,
+                                  'fight_counter': fight_counter
                                   }
+                    fight_counter += 1
+
                     fights.append(fight_dict)
     return {'fight_data': fights,
             'personal_data': [personal_dict],
             'fighter_urls': fighter_urls}
 
 
-def run_scrape(run_id = None, max_batch_size=100):
+def save_data(personal_data, fight_data, output_folder, urls_to_scrape, scraped_urls, iteration, counter, batch, run_id):
+    t1 = time.time()
+    print(
+        f'''Run id: {run_id}. Timestamp: {datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")}, iteration {iteration}. Num of fights scraped: {len(fight_data)}. Num of fighters scraped: {len(personal_data)}. Num of fighter urls found: {len(urls_to_scrape - scraped_urls)}. Scraped {counter} of {len(batch)} urls in batch.''')
+    print('saving data, {}'.format(datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')))
+
+    personal_df = pd.DataFrame.from_dict(personal_data)
+    fight_df = pd.DataFrame.from_dict(fight_data)
+
+    personal_df.to_csv(f'{output_folder}/personal_data.csv', sep='|', index=False)
+    fight_df.to_csv(f'{output_folder}/fight_data.csv', sep='|', index=False)
+
+    with open(f'{output_folder}/urls_to_scrape.pkl', 'wb') as f:
+        pickle.dump(urls_to_scrape, f)
+    with open(f'{output_folder}/scraped_urls.pkl', 'wb') as f:
+        pickle.dump(scraped_urls, f)
+    with open(f'{output_folder}/iteration.pkl', 'wb') as f:
+        pickle.dump(iteration, f)
+    print('saved data in {} seconds'.format(time.time() - t1))
+    print()
+
+
+def run_scrape(run_id=None, max_iterations = 20):
     if not run_id:
         now = datetime.datetime.now()
         run_id = now.strftime('%Y-%m-%d_%H-%M-%S')
-
+        print(f'Starting new scrape: {run_id}')
         output_folder = f'{base_output_folder}/{run_id}'
 
         if os.path.exists(output_folder):
@@ -150,6 +184,7 @@ def run_scrape(run_id = None, max_batch_size=100):
         iteration = 0
 
     else:
+        print(f'Resuming saved scrape: {run_id}')
         output_folder = f'{base_output_folder}/{run_id}'
         personal_df = pd.read_csv(f'{output_folder}/personal_data.csv', sep='|')
         fight_df = pd.read_csv(f'{output_folder}/fight_data.csv', sep='|')
@@ -164,42 +199,35 @@ def run_scrape(run_id = None, max_batch_size=100):
         with open(f'{output_folder}/iteration.pkl', 'rb') as f:
             iteration = pickle.load(f)
 
-    while True:
+    while iteration < max_iterations:
         urls_to_scrape = urls_to_scrape - scraped_urls
-        url_batch = set(list(urls_to_scrape)[:max_batch_size])
+        url_batch = set(list(urls_to_scrape))
+        print()
+        print(f'starting iteration: {iteration}, batch size: {len(url_batch)}')
+        print()
 
         if not url_batch:
             break
 
-        for url in url_batch:
+        for url in tqdm.tqdm(url_batch):
             scraped_urls.add(url)
             try:
-                res_dict = scrape_url(url)
+                res_dict = scrape_url(url, iteration)
                 personal_data.extend(res_dict['personal_data'])
                 fight_data.extend(res_dict['fight_data'])
                 urls_to_scrape.update(res_dict['fighter_urls'])
             except:
                 traceback.print_exc()
                 time.sleep(300)
-
-        personal_df = pd.DataFrame.from_dict(personal_data)
-        fight_df = pd.DataFrame.from_dict(fight_data)
-
-        personal_df.to_csv(f'{output_folder}/personal_data.csv', sep='|', index=False)
-        fight_df.to_csv(f'{output_folder}/fight_data.csv', sep='|', index=False)
-
-        with open(f'{output_folder}/urls_to_scrape.pkl', 'wb') as f:
-            pickle.dump(urls_to_scrape, f)
-        with open(f'{output_folder}/scraped_urls.pkl', 'wb') as f:
-            pickle.dump(scraped_urls, f)
-        with open(f'{output_folder}/iteration.pkl', 'wb') as f:
-            pickle.dump(iteration, f)
-
+        print()
+        save_data(personal_data, fight_data, output_folder, urls_to_scrape, scraped_urls, iteration, None, url_batch, run_id)
         iteration += 1
-        print(f'''Timestamp: {datetime.datetime.now().strftime(
-            "%Y-%m-%d_%H-%M-%S")}, iteration {iteration} finished. Num of fights: {len(
-            fight_data)}, Num of fighters: {len(personal_data)}''')
+        print()
+
+    return run_id
 
 
 if __name__ == '__main__':
-    run_scrape(run_id='2019-10-12_16-19-56')
+    # run_id='2019-10-12_16-19-56'
+    run_id = '2019-10-13_14-32-23'
+    run_scrape(run_id=run_id)

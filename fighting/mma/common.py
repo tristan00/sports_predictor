@@ -29,7 +29,7 @@ def sleep_on_error():
 
 
 def sleep_normal():
-    sleep_random_amount(min_time=0.5, max_time=2.0)
+    sleep_random_amount(min_time=1.0, max_time=3.0)
 
 
 def sleep_random_amount(min_time=.05, max_time=.2, mu=None, sigma=1.0, verbose=False):
