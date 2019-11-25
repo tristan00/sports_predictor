@@ -81,13 +81,6 @@ class DataManager():
                            'location',
                            'date_str', 'game_key', 'team_game_key', 'player_link']
 
-    # def get_dataset(self):
-    #     self.load_raw_data()
-    #     self.assign_home_for_teams()
-    #     self.calculate_team_game_rating()
-    #     self.build_past_n_game_dataset()
-    #     self.combine_past_n_game_datasets()
-
     def load_raw_data(self):
         self.team_data = pd.read_csv('{data_path}/{db_name}.csv'.format(data_path=data_path,
                                                                         db_name=box_score_details_table_name),
@@ -137,7 +130,7 @@ class DataManager():
                                        sep='|', low_memory=False)
 
     @timeit
-    def build_past_n_game_dataset(self):
+    def build_past_n_game_dataset(self, history_length, transpose_history_data):
         teams = set(self.team_data['team_tag'])
 
         self.scaler_dict = dict()
@@ -146,22 +139,24 @@ class DataManager():
             scaler.fit(self.team_data[i].fillna(self.team_data[i].median()).values.reshape(-1, 1))
             self.scaler_dict[i] = scaler
 
-        self.past_n_game_dataset = dict()
+        temp_team_df_dict = dict()
         for t in tqdm.tqdm(teams):
-            temp_team_data = self.team_data[self.team_data['team_tag'] == t]
-            temp_team_data = temp_team_data.sort_values('date_str')
+            temp_team_df_dict[t] = self.team_data[self.team_data['team_tag'] == t]
+
+        for t in tqdm.tqdm(teams):
+            temp_team_df_dict[t] = temp_team_df_dict[t].sort_values('date_str')
 
             for i in self.initial_team_data_columns:
-                temp_team_data[i] = self.scaler_dict[i].transform(temp_team_data[i].values.reshape(-1, 1))
+                temp_team_df_dict[t][i] = self.scaler_dict[i].transform(temp_team_df_dict[t][i].values.reshape(-1, 1))
 
-            game_ids = set(temp_team_data['game_key'])
-            temp_team_data = temp_team_data.set_index('game_key')
+            game_ids = set(temp_team_df_dict[t]['game_key'])
+            temp_team_df_dict[t] = temp_team_df_dict[t].set_index('game_key')
 
             self.past_n_game_dataset[t] = dict()
             for g in game_ids:
                 pregame_matrices = []
                 for n in range(1, self.history_length + 1):
-                    next_series = temp_team_data.shift(n).loc[g, self.initial_team_data_columns]
+                    next_series = temp_team_df_dict[t].shift(n).loc[g, self.initial_team_data_columns]
                     if next_series.empty:
                         next_series = pd.Series(data=[0 for _ in self.initial_team_data_columns],
                                                 index=self.initial_team_data_columns)
@@ -170,54 +165,50 @@ class DataManager():
 
                     pregame_matrices.append(next_series)
 
-                if self.transpose_history_data:
+                if transpose_history_data:
                     pregame_matrix = pd.concat(pregame_matrices, axis=1).transpose().values
+                    assert pregame_matrix.shape == (history_length, len(self.initial_team_data_columns))
                 else:
                     pregame_matrix = pd.concat(pregame_matrices, axis=1).values
-                assert pregame_matrix.shape == (self.history_length, len(self.initial_team_data_columns))
-                self.past_n_game_dataset[t][g] = pregame_matrix
+                    assert pregame_matrix.shape == (len(self.initial_team_data_columns), history_length)
+                self.past_n_game_dataset[(history_length, transpose_history_data)][t][g] = pregame_matrix
 
         self.save_past_n_game_dataset()
 
     @timeit
-    def save_past_n_game_dataset(self):
-        with open('{data_path}/{db_name}_{history_length}_{transpose_history_data}.pkl'.format(data_path=data_path,
-                                                                                               db_name=past_n_game_dataset_table_name,
-                                                                                               history_length=self.history_length,
-                                                                                               transpose_history_data=self.transpose_history_data),
+    def save_past_n_game_dataset(self, history_length, transpose_history_data):
+        with open('{data_path}/{db_name}.pkl'.format(data_path=data_path,
+                                                                                               db_name=past_n_game_dataset_table_name),
                   'wb') as f:
             pickle.dump(self.past_n_game_dataset, f)
 
     @timeit
-    def combine_past_n_game_datasets(self):
+    def combine_past_n_game_datasets(self, history_length, transpose_history_data):
         all_keys = self.team_data[['game_key', 'team_tag', 'opponent_tag', 'date_str']]
         all_keys = all_keys.drop_duplicates()
-
-        self.past_n_game_datasets_combined = dict()
+        self.past_n_game_datasets_combined.set_default((history_length, transpose_history_data), dict())
         for _, row in all_keys.iterrows():
-            self.past_n_game_datasets_combined.setdefault(row['team_tag'], dict())
-            team_record = self.past_n_game_dataset[row['team_tag']][row['game_key']]
-            opponent_record = self.past_n_game_dataset[row['opponent_tag']][row['game_key']]
+            self.past_n_game_datasets_combined[(history_length, transpose_history_data)].setdefault(row['team_tag'], dict())
+            team_record = self.past_n_game_dataset[(history_length, transpose_history_data)][row['team_tag']][row['game_key']]
+            opponent_record = self.past_n_game_dataset[(history_length, transpose_history_data)][row['opponent_tag']][row['game_key']]
             diff = team_record - opponent_record
-            self.past_n_game_datasets_combined[row['team_tag']][row['game_key']] = np.hstack([team_record,
+            self.past_n_game_datasets_combined[(history_length, transpose_history_data)][row['team_tag']][row['game_key']] = np.hstack([team_record,
                                                                                               opponent_record,
                                                                                               diff])
         self.save_past_n_game_dataset_combined()
 
     @timeit
     def save_past_n_game_dataset_combined(self):
-        with open('{data_path}/{db_name}.pkl'.format(data_path=data_path,
-                                                     db_name=past_n_game_dataset_table_name), 'wb') as f:
+        with open('{data_path}/{db_name}.pkl'.format(data_path=data_path, db_name=past_n_game_dataset_combined_table_name), 'wb') as f:
             pickle.dump(self.past_n_game_datasets_combined, f)
 
     @timeit
     def load_past_n_game_dataset_combined(self):
-        with open('{data_path}/{db_name}.pkl'.format(data_path=data_path,
-                                                     db_name=past_n_game_dataset_table_name), 'rb') as f:
+        with open('{data_path}/{db_name}.pkl'.format(data_path=data_path, db_name=past_n_game_dataset_combined_table_name), 'rb') as f:
             self.past_n_game_datasets_combined = pickle.load(f)
 
     @timeit
-    def get_labeled_data(self):
+    def get_labeled_data(self, history_length, transpose_history_data):
         self.load_processed_data()
         self.load_past_n_game_dataset_combined()
 
@@ -228,7 +219,7 @@ class DataManager():
         y = []
         for _, row in all_keys.iterrows():
             y.append(row[self.target])
-            x.append(self.past_n_game_datasets_combined[row['team_tag']][row['game_key']])
+            x.append(self.past_n_game_datasets_combined[(history_length, transpose_history_data)][row['team_tag']][row['game_key']])
 
         return np.array(x), np.array(y)
 

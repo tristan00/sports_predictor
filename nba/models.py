@@ -54,16 +54,35 @@ def optimize_cnn():
     dense_layers = [0, 1, 2, 3]
     dense_layers_width = [32, 64, 128, 256]
     convolutional_layers = [0, 1, 2, 3]
-    history_sizes = pass
 
-    dm = DataManager()
-    x, y = dm.get_labeled_data()
-    x_train, x_val, y_train, y_val = train_test_split(x, y)
-    x_val, x_test, y_val, y_test = train_test_split(x_val, y_val, train_size=.5)
+    # filters = [128]
+    # kernel_size = [3]
+    # pool_size =[2]
+    # dense_layers = [2]
+    # dense_layers_width = [128]
+    # convolutional_layers = [2]
+
+    history_lengths = [8]
+    transpose_history_data = [True, False]
+
+    dms = dict()
+    for i in history_lengths:
+        for j in transpose_history_data:
+            dm = DataManager(history_length=i, transpose_history_data=j)
+            x, y = dm.get_labeled_data()
+            x_train, x_val, y_train, y_val = train_test_split(x, y, random_state=1)
+            x_val, x_test, y_val, y_test = train_test_split(x_val, y_val, train_size=.5, random_state=1)
+            dms[(i, j)] = {'x_train':x_train,
+                           'x_val':x_val,
+                           'x_test':x_test,
+                           'y_train':y_train,
+                           'y_val':y_val,
+                           'y_test':y_test}
+
 
     results = list()
 
-    for i in range(10):
+    for i in range(24):
         try:
             filters_choice = random.choice(filters)
             kernel_size_choice = random.choice(kernel_size)
@@ -71,8 +90,10 @@ def optimize_cnn():
             dense_layers_choice = random.choice(dense_layers)
             dense_layers_width_choice = random.choice(dense_layers_width)
             convolutional_layers_choice = random.choice(convolutional_layers)
+            history_lengths_choice = random.choice(history_lengths)
+            transpose_history_data_choice = random.choice(transpose_history_data)
 
-            model = get_cnn_model(input_shape = (x.shape[1], x.shape[2]),
+            model = get_cnn_model(input_shape = (dms[(history_lengths_choice, transpose_history_data_choice)]['x_train'].shape[1], dms[(history_lengths_choice, transpose_history_data_choice)]['x_train'].shape[2]),
                                   filters=filters_choice,
                                   kernel_size=kernel_size_choice,
                                   pool_size=pool_size_choice,
@@ -86,12 +107,15 @@ def optimize_cnn():
                                                verbose=0, mode='auto')
             mcp_save = callbacks.ModelCheckpoint('{}/test.h5'.format(data_path), save_best_only=True, monitor='val_loss',
                                                        verbose=1)
-            model.fit(x_train, y_train, validation_data= (x_val, y_val),
-                                callbacks=[cb, mcp_save], epochs=200)
+            model.fit(dms[(history_lengths_choice, transpose_history_data_choice)]['x_train'],
+                      dms[(history_lengths_choice, transpose_history_data_choice)]['y_train'],
+                      validation_data= (dms[(history_lengths_choice, transpose_history_data_choice)]['x_val'],
+                                        dms[(history_lengths_choice, transpose_history_data_choice)]['y_val']),
+                                callbacks=[cb, mcp_save], epochs=200, batch_size=64)
 
             model = models.load_model('{}/test.h5'.format(data_path))
-            preds = np.rint(model.predict(x_test))
-            score = accuracy_score(y_test, preds.astype(int))
+            preds = np.rint(model.predict(dms[(history_lengths_choice, transpose_history_data_choice)]['x_test']))
+            score = accuracy_score(dms[(history_lengths_choice, transpose_history_data_choice)]['y_test'], preds.astype(int))
 
             results.append({'filters':filters_choice,
                                   'kernel_size':kernel_size_choice,
@@ -99,28 +123,38 @@ def optimize_cnn():
                                   'dense_layers':dense_layers_choice,
                                   'dense_layers_width':dense_layers_width_choice,
                                   'convolutional_layers':convolutional_layers_choice,
-                            'accuracy':score})
+                                    'accuracy':score,
+                                    'history_length':history_lengths_choice,
+                                    'transpose_history_data':transpose_history_data_choice
+                                    })
+            results = sorted(results, key = lambda x: x['accuracy'])
             print(results)
         except:
             traceback.print_exc()
 
 
-def rebuild_dataset(history_length, transpose_history_data):
-    dm = DataManager(history_length = history_length, transpose_history_data = True)
-    dm.load_raw_data()
-    dm.assign_home_for_teams()
-    dm.calculate_team_game_rating(0)
-    dm.calculate_team_game_rating(1)
-    dm.calculate_team_game_rating(2)
-    dm.calculate_team_game_rating(3)
-    dm.build_past_n_game_dataset()
-    dm.combine_past_n_game_datasets()
-    del dm
+def build_datasets(history_length_choices, transpose_history_data_choices):
+    dm1 = DataManager(history_length=history_length_choices[0], transpose_history_data=transpose_history_data_choices[0])
+    dm1.load_raw_data()
+    dm1.assign_home_for_teams()
+    # dm1.calculate_team_game_rating(0)
+    # dm1.calculate_team_game_rating(1)
+    # dm1.calculate_team_game_rating(2)
+    # dm1.calculate_team_game_rating(3)
+
+    for history_length in history_length_choices:
+        for transpose_history_data in transpose_history_data_choices:
+            dm = DataManager(history_length = history_length, transpose_history_data = transpose_history_data)
+
+            dm.load_processed_data()
+            dm.initial_team_data_columns = dm1.initial_team_data_columns.copy()
+            dm.build_past_n_game_dataset()
+            dm.combine_past_n_game_datasets()
+            del dm
 
 if __name__ == '__main__':
-    # rebuild_dataset()
-    run_naive_model()
+    # history_length_choices = [8]
+    # transpose_history_data_choices = [False]
+    # build_datasets(history_length_choices, transpose_history_data_choices)
     optimize_cnn()
-
-
 
