@@ -95,7 +95,8 @@ class DataManager():
         self.opponent_data['temp_col'] = self.opponent_data['team_tag']
         self.opponent_data['temp_col'] = self.opponent_data['team_tag']
         self.opponent_data['team_tag'] = self.opponent_data['opponent_tag']
-        self.opponent_data['team_tag'] = self.opponent_data['opponent_tag']
+        self.opponent_data['opponent_tag'] = self.opponent_data['temp_col']
+        
 
         mathups = set(self.player_data['game_key'])
         self.player_data = self.player_data.sort_values('game_key')
