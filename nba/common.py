@@ -3,7 +3,7 @@ import time
 import requests
 from bs4 import BeautifulSoup
 import threading
-
+import sys
 
 
 
@@ -12,8 +12,13 @@ day_scores_base_url = 'https://www.basketball-reference.com/boxscores/?month={mo
 data_path = r'/media/td/Samsung_T5/sports/nba'
 db_name = 'nba_db'
 box_score_link_table_name = 'boxscore_links'
+
 box_score_details_table_name = 'boxscore_details'
+processed_team_data_table_name = 'processed_team_data'
 player_detail_table_name = 'player_details'
+processed_player_data_table_name = 'processed_player_data'
+aggregated_player_data_table_name = 'aggregated_player_data'
+
 date_record_pickle_file_name = 'scraped_dates'
 box_score_record_pickle_file_name = 'scraped_games'
 max_tries = 5
@@ -27,6 +32,20 @@ rating_d = 1000
 k_min_sensitivity = 1
 
 
+def timeit(method):
+    def timed(*args, **kw):
+        print('function: %r starting' % (method.__name__))
+        sys.stdout.flush()
+
+        ts = time.time()
+        result = method(*args, **kw)
+        te = time.time()
+
+        print('function: %r finished in  %2.2f seconds' % (method.__name__, (te - ts) ))
+        sys.stdout.flush()
+        return result
+    return timed
+
 
 def clean_text(s):
     return str(s).replace('|', ' ')
@@ -37,7 +56,7 @@ def sleep_on_error():
 
 
 def sleep_normal():
-    sleep_random_amount(min_time=1.0, max_time=2.0)
+    sleep_random_amount(min_time=1.0, max_time=3.0)
 
 
 def sleep_random_amount(min_time=.05, max_time=.2, mu=None, sigma=1.0, verbose=False):

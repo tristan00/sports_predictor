@@ -141,6 +141,7 @@ class Scraper:
                 self.box_office_links = pd.read_csv('{data_path}/{db_name}.csv'.format(data_path=data_path, db_name=box_score_link_table_name), sep = '|')
                 self.box_office_details = pd.read_csv('{data_path}/{db_name}.csv'.format(data_path=data_path, db_name=box_score_details_table_name), sep = '|')
                 self.player_box_office_details = pd.read_csv('{data_path}/{db_name}.csv'.format(data_path=data_path, db_name=player_detail_table_name), sep = '|')
+                self.box_office_details.columns = [i.replace('stat_', '') for i in self.box_office_details.columns]
         except:
             traceback.print_exc()
 
@@ -210,7 +211,7 @@ class Scraper:
                 t1_data = process_stats_tables(team_1_basic_table, team_1_advanced_table)
                 t2_data = process_stats_tables(team_2_basic_table, team_2_advanced_table)
 
-                team_1_data_self = {'stat_' + str(i): j for i, j in t1_data['team_data'].items()}
+                team_1_data_self = {str(i): j for i, j in t1_data['team_data'].items()}
                 t1_base_data = {
                                 'team_tag':team_1_tag,
                                 'team_link':team_1_link,
@@ -225,7 +226,7 @@ class Scraper:
                                 'day':day
                                 }
 
-                team_2_data_self = {'stat_' + str(i): j for i, j in t2_data['team_data'].items()}
+                team_2_data_self = {str(i): j for i, j in t2_data['team_data'].items()}
                 t2_base_data = {
                                 'team_tag':team_2_tag,
                                 'team_link':team_2_link,
@@ -301,6 +302,6 @@ class Scraper:
 
 
 if __name__ == '__main__':
-    scraper = Scraper(start_date = datetime.date(1980, 1, 1), end_date = datetime.date(2019, 1, 1), clear_data=False)
+    scraper = Scraper(start_date = datetime.date(1980, 1, 1), end_date = datetime.date(2019, 6, 30), clear_data=False)
     scraper.scrape_date_range_boxscore_links_and_details()
 

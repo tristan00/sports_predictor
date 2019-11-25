@@ -161,16 +161,14 @@ def process_fight_data(df):
     df['method'] = df['method'].apply(lambda x: extract_method(x))
     df['fight_type'] = df['fight_type_text']
 
-    namespace = uuid.uuid4()
-
     df['fight_id'] = df.apply(
-        lambda x: uuid.uuid5(namespace, str(sorted([x['fighter_id'], x['opponent_id'], x['fight_date_str']]))).hex,
+        lambda x: uuid.uuid5(uuid.NAMESPACE_DNS, str(sorted([x['fighter_id'], x['opponent_id'], x['fight_date_str']]))).hex,
         axis=1)
-    df['fighter_matchup_id'] = df.apply(lambda x: uuid.uuid5(namespace, str([x['fighter_id'], x['opponent_id']])).hex,
+    df['fighter_matchup_id'] = df.apply(lambda x: uuid.uuid5(uuid.NAMESPACE_DNS, str([x['fighter_id'], x['opponent_id']])).hex,
                                         axis=1)
-    df['matchup_id'] = df.apply(lambda x: uuid.uuid5(namespace, str(sorted([x['fighter_id'], x['opponent_id']]))).hex,
+    df['matchup_id'] = df.apply(lambda x: uuid.uuid5(uuid.NAMESPACE_DNS, str(sorted([x['fighter_id'], x['opponent_id']]))).hex,
                                         axis=1)
-    df['record_id'] = df.apply(lambda x: uuid.uuid5(namespace, str(
+    df['record_id'] = df.apply(lambda x: uuid.uuid5(uuid.NAMESPACE_DNS, str(
         [x['fighter_id'], x['opponent_id'], x['fight_date_str'], x['fight_counter']])).hex, axis=1)
 
     res_mapping = {'win': 1.0,
@@ -238,11 +236,11 @@ def calculate_rating(df, filtered_df, col_name, rating_id, rating_type, use_save
 
     print(df.columns.tolist())
     base_col_name = f'{col_name}_rating_{rating_type}'
-    pre_fight_fighter_col_name = f'{base_col_name}_fighter_pre_fight'
-    post_fight_fighter_col_name = f'{base_col_name}_fighter_post_fight'
-    pre_fight_opponent_col_name = f'{base_col_name}_opponent_pre_fight'
-    post_fight_opponent_col_name = f'{base_col_name}_opponent_post_fight'
-    pre_fight_rating_diff_col_name = f'{base_col_name}_pre_fight_rating_diff'
+    pre_fight_fighter_col_name = f'fighter_{base_col_name}_pre_fight'
+    post_fight_fighter_col_name = f'fighter_{base_col_name}_fighter_post_fight'
+    pre_fight_opponent_col_name = f'opponent_{base_col_name}_pre_fight'
+    post_fight_opponent_col_name = f'opponent_{base_col_name}_post_fight'
+    # pre_fight_rating_diff_col_name = f'{base_col_name}_pre_fight_rating_diff'
 
     if use_saved_data and os.path.exists(f'{output_folder}/temp_ratings/{rating_id}_df.csv') and \
             os.path.exists(f'{output_folder}/temp_ratings/{rating_id}_filtered_df.csv') and \
@@ -305,11 +303,9 @@ def calculate_rating(df, filtered_df, col_name, rating_id, rating_type, use_save
     save_rating_data(df, filtered_df, filtered_dicts, iteration, rating_id, output_folder)
 
     filtered_df = filtered_df[
-        ['fight_id', 'fighter_id', 'fight_dt', pre_fight_fighter_col_name, post_fight_fighter_col_name,
-         pre_fight_opponent_col_name, post_fight_opponent_col_name]]
+        ['fight_id', 'fighter_id', 'fight_dt', pre_fight_fighter_col_name, post_fight_fighter_col_name]]
     df = df.merge(filtered_df, how='left', on=['fight_id', 'fighter_id', 'fight_dt'])
-    df = df[['record_id', 'fight_id', 'fighter_id', 'fight_dt', pre_fight_fighter_col_name, post_fight_fighter_col_name,
-             pre_fight_opponent_col_name, post_fight_opponent_col_name]]
+    df = df[['record_id', 'fight_id', 'fighter_id', 'fight_dt', pre_fight_fighter_col_name, post_fight_fighter_col_name]]
 
     fighter_ids = set(df['fighter_id'])
     fighter_id_dict = dict()
@@ -323,19 +319,14 @@ def calculate_rating(df, filtered_df, col_name, rating_id, rating_type, use_save
 
         temp_df[pre_fight_fighter_col_name] = temp_df[pre_fight_fighter_col_name].fillna(method='ffill')
         temp_df[post_fight_fighter_col_name] = temp_df[post_fight_fighter_col_name].fillna(method='ffill')
-        temp_df[pre_fight_opponent_col_name] = temp_df[pre_fight_opponent_col_name].fillna(method='ffill')
-        temp_df[post_fight_opponent_col_name] = temp_df[post_fight_opponent_col_name].fillna(method='ffill')
-
         temp_df[pre_fight_fighter_col_name] = temp_df[pre_fight_fighter_col_name].fillna(starting_rating)
         temp_df[post_fight_fighter_col_name] = temp_df[post_fight_fighter_col_name].fillna(starting_rating)
-        temp_df[pre_fight_opponent_col_name] = temp_df[pre_fight_opponent_col_name].fillna(starting_rating)
-        temp_df[post_fight_opponent_col_name] = temp_df[post_fight_opponent_col_name].fillna(starting_rating)
+
 
         out_dfs.append(temp_df)
 
     df = pd.concat(out_dfs)
-    df[pre_fight_rating_diff_col_name] = df[pre_fight_fighter_col_name] - df[pre_fight_opponent_col_name]
-    df = df[['record_id', pre_fight_fighter_col_name, pre_fight_opponent_col_name, pre_fight_rating_diff_col_name]]
+    df = df[['record_id', pre_fight_fighter_col_name]]
     return df
 
 
@@ -420,11 +411,12 @@ def build_personal_features(run_id):
     df = pd.read_csv(f'{output_folder}/merged_fight_data.csv', sep='|')
 
     le = LabelEncoder()
-    df['fighter_nationality'] = le.fit_transform(df['nationality'])
+    df['fighter_nationality_enc'] = le.fit_transform(df['fighter_nationality'].fillna(nan_cat))
     df['fighter_age'] = df.apply(lambda x: get_age(x['fighter_birth_dt'], x['fight_dt']), axis=1)
     df['fighter_height'] = df.apply(lambda x: get_age(x['fighter_birth_dt'], x['fight_dt']), axis=1)
 
-    df = df[['record_id', 'is_same_nationality', 'fighter_age', 'opponent_age', 'age_diff', 'height_diff']]
+    df = df[['record_id', 'fighter_nationality_enc', 'fighter_age', 'fighter_height']]
+    df = df.drop_duplicates()
     df.to_csv(f'{output_folder}/personal_features.csv', sep='|', index=False)
 
 
@@ -447,7 +439,7 @@ def build_fight_timing_features(run_id):
     df['fight_dt2'] = pd.to_datetime(df['fight_dt'], errors='coerce')
     df = df.sort_values('fight_dt2')
     df['fighter_days_since_last_fight'] = df.groupby('fighter_id')['fight_dt2'].diff().dt.days
-    df = df[['record_id', 'days_since_last_fight']]
+    df = df[['record_id', 'fighter_days_since_last_fight']]
     df.to_csv(f'{output_folder}/fight_timing_features.csv', sep='|', index=False)
 
 
@@ -459,15 +451,15 @@ def build_rematch_features(run_id):
     df['fight_dt2'] = pd.to_datetime(df['fight_dt'], errors='coerce')
 
     all_matchups = dict(df['fighter_matchup_id'].value_counts())
-    for m, c in all_matchups.items():
+    print(len(all_matchups))
+    for m, c in tqdm.tqdm(all_matchups.items()):
         if c == 1:
             continue
 
-        df.loc[df['fighter_matchup_id'] == m, 'fighter_days_since_last_fight_in_matchup'] = df.groupby(['matchup_id', 'fighter_id'])['fight_dt2'].diff().dt.days
-        df.loc[df['fighter_matchup_id'] == m, 'fighter_result_in_last_matchup'] = df.groupby(['matchup_id', 'fighter_id'])['result'].diff()
+        df.loc[df['fighter_matchup_id'] == m, 'fighter_days_since_last_fight_in_matchup'] = df.loc[df['fighter_matchup_id'] == m].groupby(['fighter_matchup_id'])['fight_dt2'].diff().dt.days
+        df.loc[df['fighter_matchup_id'] == m, 'fighter_result_in_last_matchup'] = df.loc[df['fighter_matchup_id'] == m].groupby(['fighter_matchup_id'])['result'].diff()
 
     df = df[['record_id', 'fighter_days_since_last_fight_in_matchup', 'fighter_result_in_last_matchup']]
-    df = df.fillna(df.median())
     df.to_csv(f'{output_folder}/rematch_features.csv', sep='|', index=False)
 
 
@@ -481,13 +473,24 @@ def merge_initial_features(run_id):
     rematch_features = pd.read_csv(f'{output_folder}/rematch_features.csv', sep='|')
     rating_features = pd.read_csv(f'{output_folder}/fighter_ratings.csv', sep='|')
 
-    df_out = personal_features.merge(date_features)
-    df_out = df_out.merge(fight_timing_features)
-    df_out = df_out.merge(rematch_features)
-    df_out = df_out.merge(rating_features)
+    df_out = df[['record_id', 'fighter_id', 'opponent_id']]
+    print(df_out.shape)
+    df_out = df_out.merge(personal_features, on = 'record_id', how = 'left')
+    print(df_out.shape)
+    df_out = df_out.merge(date_features, on = 'record_id', how = 'left')
+    print(df_out.shape)
+    df_out = df_out.merge(fight_timing_features, on = 'record_id', how = 'left')
+    print(df_out.shape)
+    df_out = df_out.merge(rematch_features, on = 'record_id', how = 'left')
+    print(df_out.shape)
+    df_out = df_out.merge(rating_features, on = 'record_id', how = 'left')
+    print(df_out.shape)
 
     df_out.to_csv(f'{output_folder}/merged_initial_features.csv', sep='|', index=False)
 
+    print(df.columns.tolist())
+    print(df_out.columns.tolist())
+    print(set(df.columns.tolist()) & set(df_out.columns.tolist()))
     df_out = df_out.merge(df)
     df_out.to_csv(f'{output_folder}/merged_initial_features_and_data.csv', sep='|', index=False)
 
@@ -496,10 +499,12 @@ def build_moving_avg_features(run_id, min_perc=.04):
     print('build_moving_avg_features')
     output_folder = f'{base_output_folder}/{run_id}'
     df = pd.read_csv(f'{output_folder}/merged_initial_features_and_data.csv', sep='|')
+    df = df.sort_values('fight_dt')
     added_cols = set()
+    print(df.shape)
 
     mov_avg_cols_cat_cols = ['general_method', 'event_org', 'method_details']
-    mov_avg_cols = ['fight_end_time', 'result', 'fight_end_round', 'days_since_last_fight']
+    mov_avg_cols = ['fight_end_time', 'result', 'fight_end_round', 'fighter_days_since_last_fight']
 
     for c in mov_avg_cols_cat_cols:
         value_counts_series = df[c].value_counts(normalize=True)
@@ -526,7 +531,7 @@ def build_moving_avg_features(run_id, min_perc=.04):
                 # df.loc[df['opponent_id'] == fighter_id, f'opponent_moving_average_{c}_{w}'] = \
                 # df.loc[df['opponent_id'] == fighter_id].shift(periods=1).rolling(window=w)[c].mean()
 
-                df[f'fighter_moving_average_{c}_{w}'] = df[f'fighter_moving_average_{c}_{w}'].fillna(0)
+                # df[f'fighter_moving_average_{c}_{w}'] = df[f'fighter_moving_average_{c}_{w}'].fillna(0)
                 # df[f'opponent_moving_average_{c}_{w}'] = df[f'opponent_moving_average_{c}_{w}'].fillna(0)
 
                 # df[f'diff_moving_average_{c}_{w}'] = df[f'fighter_moving_average_{c}_{w}'] - df[
@@ -534,34 +539,60 @@ def build_moving_avg_features(run_id, min_perc=.04):
                 # added_cols.update({f'fighter_moving_average_{c}_{w}', f'opponent_moving_average_{c}_{w}',
                 #                    f'diff_moving_average_{c}_{w}'})
                 added_cols.add(f'fighter_moving_average_{c}_{w}')
+    print(df.shape)
+
+    for w in window_sizes:
+        for c in mov_avg_cols:
+            df[f'fighter_moving_average_{c}_{w}'] = df[f'fighter_moving_average_{c}_{w}'].fillna(0)
 
     if 'temp_col' in df.columns:
         df = df.drop('temp_col', axis=1)
+
+    print(df.shape)
     df = df[['record_id'] + list(added_cols)]
+    print(df.shape)
     df.to_csv(f'{output_folder}/moving_avg_features.csv', sep='|', index=False)
 
 
-def build_past_opponent_features(run_id):
-    print('feature_extraction')
+def build_opponent_features(run_id):
+    print('past_opponent_features')
     output_folder = f'{base_output_folder}/{run_id}'
     fight_df = pd.read_csv(f'{output_folder}/merged_fight_data.csv', sep='|')
-    fight_df = fight_df[['fighter_id', 'opponent_id', 'record_id']]
-    features_fighter = pd.read_csv(f'{output_folder}/merged_initial_features.csv', sep='|')
-    features_fighter = features_fighter[[i for i in features_fighter.colums if 'fighter_' in i or '_id' in i]]
+    fight_df_map_table = fight_df[['fighter_id', 'opponent_id', 'record_id']]
+
+    features = pd.read_csv(f'{output_folder}/merged_initial_features.csv', sep='|')
+    features = features[[i for i in features.columns if 'fighter_' in i or '_id' in i]]
+    fight_df_map_table = fight_df_map_table.merge(features)
+    fight_df1 = fight_df_map_table.merge(features)
+
+    fight_df_map_table2 = fight_df.copy()
+    fight_df_map_table2['temp_col'] = fight_df_map_table2['fighter_id']
+    fight_df_map_table2['fighter_id'] = fight_df_map_table2['opponent_id']
+    fight_df_map_table2['opponent_id'] = fight_df_map_table2['temp_col']
+    fight_df2 = fight_df_map_table2.merge(features)
+
     features_opponent = pd.read_csv(f'{output_folder}/merged_initial_features.csv', sep='|')
-    features_opponent.columns = [i if 'fighter_' not in i else i.replace('fighter_', 'opponent_') for i in features_opponent.columns]
-    features_opponent = features_opponent[[i for i in features_fighter.colums if 'opponent_' in i or '_id' in i]]
+    fight_df_copy = fight_df.copy()
+
+
+    features_opponent.columns = [i if 'fighter_' not in i and '_id' not in i else i.replace('fighter_', 'opponent_') for i in features_opponent.columns]
+    features_opponent = features_opponent[[i for i in features_opponent.columns if 'opponent_' in i or '_id' in i]]
+    features_opponent
+
+    fight_df = fight_df.drop_duplicates()
 
     print(fight_df.shape)
-    fight_df = fight_df.merge(features_fighter, how = 'left', on = 'record_id')
+    fight_df = fight_df.merge(features_fighter, how = 'left', on = ['record_id', 'fighter_id'])
     print(fight_df.shape)
-    fight_df = fight_df.merge(features_fighter, how = 'left', on = 'record_id')
-    print(fight_df.shape)
+    fight_df = fight_df.merge(features_opponent, how = 'left', on = ['record_id', 'opponent_id'])
+    print(fight_df.shape, fight_df.columns.tolist())
 
     added_columns = ['record_id']
+
     for i, j in zip(features_fighter.columns, features_opponent.columns):
+        print(i, j, '_id' not in i and 'fighter' in i)
         if '_id' not in i and 'fighter' in i:
-            new_col_name = f'{i}_sub_by_{j}'
+            new_col_name = f'diff_{i}_{j}'
             added_columns.extend([i, j, new_col_name])
             fight_df[new_col_name] = fight_df[i] - fight_df[j]
     fight_df = fight_df[added_columns]
@@ -573,8 +604,19 @@ def feature_extraction(run_id):
     output_folder = f'{base_output_folder}/{run_id}'
     df = pd.read_csv(f'{output_folder}/merged_initial_features_and_data.csv', sep='|')
     features = pd.read_csv(f'{output_folder}/combined_fighter_and_opponent_features.csv', sep='|')
-    moving_avg_features = pd.read_csv(f'{output_folder}/moving_avg_features.csv', sep='|')
-    features = features.merge(moving_avg_features)
+
+    # moving_avg_features = pd.read_csv(f'{output_folder}/moving_avg_features.csv', sep='|')
+    #
+    # print(moving_avg_features.columns.tolist())
+    # print(features.columns.tolist())
+    # print(set(moving_avg_features.columns.tolist()) & set(features.columns.tolist()))
+    #
+    # moving_avg_features_dups = moving_avg_features[moving_avg_features.duplicated(subset = ['record_id'], keep=False)]
+    # print(f'df shape: {df.shape}, features shape: {features.shape}, moving_avg_features shape: {moving_avg_features.shape}')
+    #
+    # features = features.merge(moving_avg_features)
+    # print(f'df shape: {df.shape}, features shape: {features.shape}, moving_avg_features shape: {moving_avg_features.shape}')
+
     targets = df[['result', 'general_method', 'fight_end_round', 'record_id']]
     features.to_csv(f'{output_folder}/final_features.csv', index=False, sep='|')
     targets.to_csv(f'{output_folder}/final_target.csv', index=False, sep='|')
@@ -594,6 +636,9 @@ def feature_evaluation(run_id):
     y = y_df['result']
 
     x_df = x_df.fillna(x_df.median())
+
+    numerics = ['int16', 'int32', 'int64', 'float16', 'float32', 'float64']
+    x_df = x_df.select_dtypes(include=numerics)
 
     feature_evaluation = dict()
     for c in x_df.columns:
@@ -630,6 +675,7 @@ def run_data_pipeline(run_id = None, rescrape = False, scrape_iterations = 100):
     build_rematch_features(run_id=run_id)
     merge_initial_features(run_id=run_id)
     build_moving_avg_features(run_id=run_id, min_perc=.01)
+    build_opponent_features(run_id=run_id)
     feature_extraction(run_id=run_id)
     feature_evaluation(run_id=run_id)
 
@@ -641,15 +687,16 @@ def scratch():
     run_id = '2019-10-19_12-35-26'
     run_id = run_scrape(run_id=run_id, max_iterations=2)
 
-    prepare_data(run_id=run_id, sample=False)
-    merge_fighter_data(run_id=run_id)
-    calculate_all_ratings(run_id=run_id, min_perc=.01, use_saved_data=True)
-    build_personal_features(run_id=run_id)
-    build_date_features(run_id=run_id)
-    build_fight_timing_features(run_id=run_id)
-    build_rematch_features(run_id=run_id)
-    merge_initial_features(run_id=run_id)
-    build_moving_avg_features(run_id=run_id, min_perc=.01)
+    # prepare_data(run_id=run_id, sample=False)
+    # merge_fighter_data(run_id=run_id)
+    # calculate_all_ratings(run_id=run_id, min_perc=.01, use_saved_data=False)
+    # build_personal_features(run_id=run_id)
+    # build_date_features(run_id=run_id)
+    # build_fight_timing_features(run_id=run_id)
+    # build_rematch_features(run_id=run_id)
+    # merge_initial_features(run_id=run_id)
+    # build_moving_avg_features(run_id=run_id, min_perc=.01)
+    build_opponent_features(run_id=run_id)
     feature_extraction(run_id=run_id)
     feature_evaluation(run_id=run_id)
 
