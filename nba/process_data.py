@@ -86,7 +86,7 @@ class DataManager():
     @timeit
     def create_team_features(self):
         self.assign_home_for_teams()
-        for i in [5, 25, 100]:
+        for i in [5, 25]:
             self.calculate_team_moving_averages(i)
         for i in [0, 1, 2, 3]:
             self.calculate_team_game_rating(i)
@@ -139,7 +139,7 @@ class DataManager():
     @timeit
     def create_player_features(self):
         self.process_minutes_played()
-        self.calculate_player_moving_averages([5, 25, 100])
+        self.calculate_player_moving_averages([5, 25])
         self.aggregate_player_data()
 
     @timeit
@@ -154,10 +154,10 @@ class DataManager():
             if i == 'team_game_key':
                 continue
             for j in ['mean', 'median', 'amax', 'amin', 'var']:
-                self.player_data_agg['{0}_player_aggregate_{1}'.format(i, j)] = self.player_data_agg[(i, j)]
-                self.player_data_agg
+                player_data_agg['{0}_player_aggregate_{1}'.format(i, j)] = player_data_agg[(i, j)]
+                player_data_agg = player_data_agg.drop((i, j), axis = 1)
 
-        self.player_data = self.player_data.reset_index()
+        self.player_data = player_data_agg.reset_index()
         self.save_player_data()
 
     @timeit
@@ -236,7 +236,7 @@ def create_data_files():
                                                                      db_name=player_detail_table_name), sep='|', low_memory=False)
 
     dm = DataManager(team_data, player_data)
-    # dm.create_team_features()
+    dm.create_team_features()
     dm.create_player_features()
     dm.team_data.describe()
 
