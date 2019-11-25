@@ -11,8 +11,9 @@ from nba.common import (
 processed_team_data_table_name,
 timeit,
 processed_player_data_table_name,
-aggregated_player_data_table_name
+combined_feature_file_data_table_name
                     )
+from sklearn.decomposition import PCA
 # import multiprocessing
 from collections import Counter
 import tqdm
@@ -51,14 +52,17 @@ class DataManager():
                                    'fg', 'fg3', 'fg3_pct', 'fg3a', 'fg3a_per_fga_pct', 'fg_pct', 'fga', 'ft', 'ft_pct',
                                    'fta', 'fta_per_fga_pct', 'mp', 'off_rtg', 'orb', 'orb_pct', 'pf',
                                    'plus_minus', 'pts', 'stl', 'stl_pct', 'tov', 'tov_pct', 'trb', 'trb_pct', 'ts_pct',
-                                   'usg_pct', 'win']
+                                   'usg_pct', f'{feature_indicator_str}_home']
     initial_player_data_columns = ['ast', 'ast_pct', 'blk', 'blk_pct', 'def_rtg', 'drb', 'drb_pct', 'efg_pct',
                                    'fg', 'fg3', 'fg3_pct', 'fg3a', 'fg3a_per_fga_pct', 'fg_pct', 'fga', 'ft', 'ft_pct',
                                    'fta', 'fta_per_fga_pct', 'mp', 'off_rtg', 'orb', 'orb_pct', 'pf',
                                    'plus_minus', 'pts', 'stl', 'stl_pct', 'tov', 'tov_pct', 'trb', 'trb_pct', 'ts_pct',
-                                   'usg_pct', 'win']
+                                   'usg_pct']
+    target = 'win'
     id_columns = ['team_tag', 'team_link', 'team_name', 'opponent_tag', 'opponent_name', 'opponent_link', 'location',
                   'date_str', 'game_key', 'team_game_key', 'player_link']
+
+    pca_dims = 8
 
     def __init__(self, team_data, player_data):
         self.team_data = team_data
@@ -71,49 +75,73 @@ class DataManager():
         self.player_features = pd.DataFrame()
 
         self.team_data['date_str'] = self.team_data.apply(lambda x: str(x['year']).zfill(4) + '-' + str(x['month']).zfill(2) + '-' + str(x['day']).zfill(2), axis = 1)
-        self.team_data['game_key'] = self.team_data.apply(lambda x:  str(sorted([x['date_str'], x['team_tag'], x['opponent_tag']])), axis = 1)
-        self.team_data['team_game_key'] = self.team_data.apply(lambda x:  str([x['date_str'], x['team_tag'], x['opponent_tag']]), axis = 1)
+        self.team_data['game_key'] = self.team_data.apply(lambda x:  str(sorted([str(x['date_str']), str(x['team_tag']), str(x['opponent_tag'])])), axis = 1)
+        self.team_data['team_game_key'] = self.team_data.apply(lambda x:  str([str(x['date_str']), str(x['team_tag']), str(x['opponent_tag'])]), axis = 1)
 
         self.player_data['date_str'] = self.player_data.apply(lambda x: str(x['year']).zfill(4) + '-' + str(x['month']).zfill(2) + '-' + str(x['day']).zfill(2), axis = 1)
-        self.player_data['game_key'] = self.player_data.apply(lambda x:  str(sorted([x['date_str'], x['team_tag'], x['opponent_tag']])), axis = 1)
-        self.player_data['team_game_key'] = self.player_data.apply(lambda x:  str([x['date_str'], x['team_tag'], x['opponent_tag']]), axis = 1)
+        self.player_data['game_key'] = self.player_data.apply(lambda x:  str(sorted([str(x['date_str']), str(x['team_tag']), str(x['opponent_tag'])])), axis = 1)
+        self.player_data['team_game_key'] = self.player_data.apply(lambda x:  str([str(x['date_str']), str(x['team_tag']), str(x['opponent_tag'])]), axis = 1)
 
         self.team_data = self.team_data.sort_values('date_str')
         self.player_data = self.player_data.sort_values('date_str')
 
 
     def process_features(self):
-        self.create_team_features()
-        self.create_player_features()
+        self.player_data = self.load_player_data()
+        self.team_data = self.load_team_data()
         self.player_data = self.player_data.merge(self.team_data)
-
         cols_to_drop = {'team_link', 'team_name', 'opponent_name', 'opponent_link', 'location', 'player_link'}
-        # ['team_tag', 'opponent_tag', 'date_str', 'game_key', 'team_game_key']
         self.player_data = self.player_data.drop(list(cols_to_drop & set(self.player_data.columns)), axis = 1)
 
-        self.opponent_data = self.player_data.copy()
-        self.opponent_data['temp_col'] = self.opponent_data['team_tag']
-        self.opponent_data['temp_col'] = self.opponent_data['team_tag']
-        self.opponent_data['team_tag'] = self.opponent_data['opponent_tag']
-        self.opponent_data['opponent_tag'] = self.opponent_data['temp_col']
-        
 
-        mathups = set(self.player_data['game_key'])
-        self.player_data = self.player_data.sort_values('game_key')
-        for i in range(len(mathups)):
-            self.player_data.iloc
+        opponent_data = self.player_data.copy()
+        opponent_data['temp_col'] = opponent_data['team_tag']
+        opponent_data['temp_col'] = opponent_data['team_tag']
+        opponent_data['team_tag'] = opponent_data['opponent_tag']
+        opponent_data['opponent_tag'] = opponent_data['temp_col']
 
+        print(opponent_data.shape)
+        opponent_data['team_game_key'] = opponent_data.apply(lambda x:  str([x['date_str'], x['team_tag'], x['opponent_tag']]), axis = 1)
+        opponent_data = opponent_data.set_index(['team_tag', 'opponent_tag', 'team_game_key', 'date_str', 'game_key'])
+        self.player_data = self.player_data.set_index(['team_tag', 'opponent_tag', 'team_game_key', 'date_str', 'game_key'])
+        opponent_data.columns = ['{0}_opponent'.format(i) for i in opponent_data.columns]
 
+        columns = self.player_data.columns.tolist()
+        self.player_data = self.player_data.join(opponent_data)
+        for i in columns:
+            if i != self.target:
+                self.player_data['{0}_difference_over_opponent'.format(i)] = self.player_data[i] - self.player_data['{0}_opponent'.format(i)]
+        self.save_output()
+
+    @timeit
+    def save_output(self):
+        self.player_data.to_csv('{data_path}/{db_name}.csv'.format(data_path=data_path,
+                                                                     db_name=combined_feature_file_data_table_name), sep='|', index = False)
 
     #################################################################################################################
     # Team features
     @timeit
     def create_team_features(self):
         self.assign_home_for_teams()
-        for i in [5, 25]:
-            self.calculate_team_moving_averages(i)
-        for i in [0, 1, 2, 3]:
+        self.train_team_vectorizer()
+        self.get_past_n_game_data(10)
+        for i in [0]:
             self.calculate_team_game_rating(i)
+        self.team_data = self.team_data[[i for i in self.team_data.columns if i not in self.initial_team_data_columns]]
+        self.save_team_data()
+
+
+    @timeit
+    def train_team_vectorizer(self):
+        self.team_game_vectorizer = PCA(n_components=self.pca_dims)
+
+        for i in self.initial_team_data_columns:
+            self.team_data[i] = self.team_data[i].replace(np.inf, np.nan).replace(-np.inf, np.nan)
+            if self.team_data[i].isna().sum() / self.team_data[i].shape[0] < 1.0:
+                self.team_data[i] = self.team_data[i].fillna(self.team_data[i].median())
+            self.team_data[i] = self.team_data[i].fillna(0)
+
+        self.team_game_vectorizer.fit(self.team_data[self.initial_team_data_columns])
 
     @timeit
     def save_team_data(self):
@@ -121,9 +149,34 @@ class DataManager():
                                                                      db_name=processed_team_data_table_name), sep='|', index = False)
 
     @timeit
+    def load_team_data(self):
+        return pd.read_csv('{data_path}/{db_name}.csv'.format(data_path=data_path,
+                                                                     db_name=processed_team_data_table_name), sep='|')
+
+    @timeit
     def assign_home_for_teams(self):
         home_dict = find_team_home_loc(self.team_data)
         self.team_data[f'{self.feature_indicator_str}_home'] = self.team_data.apply(lambda x: 1 if home_dict[(x['team_tag'], x['year'])] == x['location'] else 0, axis = 1)
+
+    @timeit
+    def get_past_n_game_data(self, n):
+        self.team_data = self.team_data.set_index(['team_game_key'])
+        self.team_data = self.team_data.sort_values('date_str')
+        # next_records = self.team_game_vectorizer.transform(self.team_data[self.initial_team_data_columns])
+
+        next_records_df = pd.DataFrame(data=self.team_data[self.initial_team_data_columns],
+                                       # columns=[f'{self.feature_indicator_str }_{self.team_str}_past_team_data_pca_dim_{n}' for n in range(self.pca_dims)],
+                                       columns=[f'{i}_past_team_data_{n}' for n, i in enumerate(self.initial_team_data_columns)],
+                                       index = self.team_data.index)
+
+        for i in range(1, n + 1):
+            temp_next_records = next_records_df.shift(i)
+            temp_next_records.columns = ['{0}_{1}_records'.format(j, i) for j in temp_next_records.columns]
+            self.team_data = self.team_data.join(temp_next_records)
+
+        self.team_data = self.team_data.reset_index()
+        self.save_team_data()
+
 
     @timeit
     def calculate_team_moving_averages(self, n):
@@ -163,18 +216,34 @@ class DataManager():
     @timeit
     def create_player_features(self):
         self.process_minutes_played()
-        self.calculate_player_moving_averages([5, 25])
+        self.train_player_vectorizer()
+        self.get_past_n_player_data(10)
         self.aggregate_player_data()
+        self.player_data = self.player_data[[i for i in self.player_data.columns if i not in self.initial_player_data_columns]]
+        self.save_player_data()
+
+    @timeit
+    def train_player_vectorizer(self):
+        self.player_game_vectorizer = PCA(n_components=self.pca_dims)
+        for i in self.initial_player_data_columns:
+            self.player_data[i] = self.player_data[i].replace(np.inf, np.nan).replace(-np.inf, np.nan)
+            if self.player_data[i].isna().sum() / self.player_data[i].shape[0] < 1.0:
+                self.player_data[i] = self.player_data[i].fillna(self.player_data[i].median())
+            self.player_data[i] = self.player_data[i].fillna(0)
+        self.player_game_vectorizer.fit(self.player_data[self.initial_player_data_columns])
 
     @timeit
     def aggregate_player_data(self):
         self.player_data = self.player_data.merge(self.team_data[[i for i in self.team_data.columns if i not in self.initial_player_data_columns]])
         player_data_num = self.player_data.select_dtypes(include=[np.number])
-        player_data_num = player_data_num[[i for i in player_data_num.columns if i not in self.initial_player_data_columns]]
+        player_data_num = player_data_num[[i for i in player_data_num.columns if i not in self.initial_player_data_columns and i != self.target]]
         self.player_data = self.player_data[['team_game_key']].join(player_data_num)
-        player_data_agg = self.player_data.groupby(['team_game_key']).agg({i: [np.mean, np.median, np.max, np.min, np.var] for i in self.player_data.columns if i not in  {'team_game_key'}})
+        player_data_agg = self.player_data.groupby(['team_game_key']).agg({i: [np.mean, np.median, np.max, np.min, np.var] for i in self.player_data.columns if i not in {'team_game_key'}})
 
-        for i in self.player_data.columns:
+        print(player_data_agg.columns.tolist())
+        columns = self.player_data.columns.tolist()
+        for i in columns:
+            print(i)
             if i == 'team_game_key':
                 continue
             for j in ['mean', 'median', 'amax', 'amin', 'var']:
@@ -193,11 +262,34 @@ class DataManager():
         self.player_data['mp'] = self.player_data.apply(lambda x: x['minutes_played'] + (x['minutes_played']/60) if len(str(x['mp']).split(':')) else None, axis = 1)
         self.player_data = self.player_data.drop(['minutes_played', 'seconds_played'], axis = 1)
 
-
     @timeit
     def save_player_data(self):
         self.player_data.to_csv('{data_path}/{db_name}.csv'.format(data_path=data_path,
                                                                      db_name=processed_player_data_table_name), sep='|', index = False)
+    @timeit
+    def load_player_data(self):
+        return pd.read_csv('{data_path}/{db_name}.csv'.format(data_path=data_path,
+                                                                     db_name=processed_player_data_table_name), sep='|')
+    @timeit
+    def get_past_n_player_data(self, n):
+
+        self.player_data = self.player_data.set_index(['team_game_key', 'player_link'])
+        self.player_data = self.player_data.sort_values('date_str')
+        # next_records = self.player_game_vectorizer.transform(self.player_data[self.initial_player_data_columns])
+        next_records = self.player_data[self.initial_player_data_columns]
+        next_records_df = pd.DataFrame(data=next_records,
+                                       # columns=[f'{self.feature_indicator_str }_{self.player_str}_past_team_data_pca_dim_{n}' for n in range(self.pca_dims)],
+                                       columns=[f'{i}_past_player_data_{n}' for n, i  in enumerate(self.initial_player_data_columns)],
+                                       index = self.player_data.index)
+        players = None
+        for i in range(1, n + 1):
+            temp_next_records = next_records_df.shift(i)
+            temp_next_records.columns = ['{0}_{1}_records'.format(j, i) for j in temp_next_records.columns]
+            self.player_data = self.player_data.join(temp_next_records)
+        self.player_data = self.player_data.reset_index()
+        self.save_player_data()
+
+
 
     @timeit
     def calculate_player_moving_averages(self, n_values):
@@ -259,10 +351,13 @@ def create_data_files():
         player_data = pd.read_csv('{data_path}/{db_name}.csv'.format(data_path=data_path,
                                                                      db_name=player_detail_table_name), sep='|', low_memory=False)
 
+    print(player_data.columns.tolist())
+
     dm = DataManager(team_data, player_data)
     dm.create_team_features()
     dm.create_player_features()
-    dm.team_data.describe()
+    dm.process_features()
+
 
 if __name__ == '__main__':
     create_data_files()

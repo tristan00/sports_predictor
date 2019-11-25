@@ -18,6 +18,7 @@ processed_team_data_table_name = 'processed_team_data'
 player_detail_table_name = 'player_details'
 processed_player_data_table_name = 'processed_player_data'
 aggregated_player_data_table_name = 'aggregated_player_data'
+combined_feature_file_data_table_name = 'combined_feature_file'
 
 date_record_pickle_file_name = 'scraped_dates'
 box_score_record_pickle_file_name = 'scraped_games'
