@@ -9,7 +9,8 @@ import sys
 
 base_url = 'https://www.basketball-reference.com/'
 day_scores_base_url = 'https://www.basketball-reference.com/boxscores/?month={month}&day={day}&year={year}'
-data_path = r'/media/td/Samsung_T5/sports/nba'
+# data_path = r'/media/td/Samsung_T5/sports/nba'
+data_path = r'C:\Users\TristanDelforge\Documents\sports_predictor\nba'
 db_name = 'nba_db'
 box_score_link_table_name = 'boxscore_links'
 
@@ -19,6 +20,8 @@ player_detail_table_name = 'player_details'
 processed_player_data_table_name = 'processed_player_data'
 aggregated_player_data_table_name = 'aggregated_player_data'
 combined_feature_file_data_table_name = 'combined_feature_file'
+past_n_game_dataset_table_name = 'past_n_game_dataset'
+past_n_game_dataset_combined_table_name = 'past_n_game_dataset_combined'
 
 date_record_pickle_file_name = 'scraped_dates'
 box_score_record_pickle_file_name = 'scraped_games'
@@ -57,7 +60,7 @@ def sleep_on_error():
 
 
 def sleep_normal():
-    sleep_random_amount(min_time=1.0, max_time=3.0)
+    sleep_random_amount(min_time=0.1, max_time=0.5)
 
 
 def sleep_random_amount(min_time=.05, max_time=.2, mu=None, sigma=1.0, verbose=False):
