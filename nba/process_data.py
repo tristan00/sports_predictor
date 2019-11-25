@@ -81,6 +81,29 @@ class DataManager():
         self.team_data = self.team_data.sort_values('date_str')
         self.player_data = self.player_data.sort_values('date_str')
 
+
+    def process_features(self):
+        self.create_team_features()
+        self.create_player_features()
+        self.player_data = self.player_data.merge(self.team_data)
+
+        cols_to_drop = {'team_link', 'team_name', 'opponent_name', 'opponent_link', 'location', 'player_link'}
+        # ['team_tag', 'opponent_tag', 'date_str', 'game_key', 'team_game_key']
+        self.player_data = self.player_data.drop(list(cols_to_drop & set(self.player_data.columns)), axis = 1)
+
+        self.opponent_data = self.player_data.copy()
+        self.opponent_data['temp_col'] = self.opponent_data['team_tag']
+        self.opponent_data['temp_col'] = self.opponent_data['team_tag']
+        self.opponent_data['team_tag'] = self.opponent_data['opponent_tag']
+        self.opponent_data['team_tag'] = self.opponent_data['opponent_tag']
+
+        mathups = set(self.player_data['game_key'])
+        self.player_data = self.player_data.sort_values('game_key')
+        for i in range(len(mathups)):
+            self.player_data.iloc
+
+
+
     #################################################################################################################
     # Team features
     @timeit
