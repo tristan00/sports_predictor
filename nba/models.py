@@ -71,12 +71,12 @@ def get_nn_model(input_shape1, input_shape2, filters, kernel_size, pool_size, de
 
 def optimize_nn():
     filters = list(range(1, 128))
-    kernel_size = list(range(1, 10))
-    pool_size = list(range(1, 10))
-    dense_top_layers = [1, 2, 3]
-    dense_layers_width = [128]
-    convolutional_layers = [1, 2, 3]
-    rnn_layers = [1, 2, 3]
+    kernel_size = list(range(1, 15))
+    pool_size = list(range(1, 15))
+    dense_top_layers = [1, 2, 3, 4]
+    dense_layers_width = list(range(16, 160))
+    convolutional_layers = [1, 2, 3, 4]
+    rnn_layers = [1, 2, 3, 4]
     dnn_layers = [1]
     network_type = ['cnn', 'rnn', 'dnn']
     # network_type = ['cnn']
@@ -88,14 +88,11 @@ def optimize_nn():
     dm = DataManager()
     # dm.update_raw_datasets()
 
-    dm.scale_data()
-
     dms = dict()
     for i in history_lengths:
         for j in transpose_history_data:
-
-            dm.build_timeseries(i, j)
-            dm.combine_timeseries(i, j)
+            # dm.build_timeseries(i, j)
+            # dm.combine_timeseries(i, j)
             x1, x2, y = dm.get_labeled_data(i, j)
             x1_train, x1_val, x2_train, x2_val, y_train, y_val = train_test_split(x1, x2, y, random_state=1)
             x1_val, x1_test, x2_val, x2_test, y_val, y_test = train_test_split(x1_val, x2_val, y_val, train_size=.5,

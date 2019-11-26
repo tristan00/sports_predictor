@@ -70,10 +70,10 @@ class DataManager():
                                           'ts_pct',
                                           'usg_pct', f'{self.feature_indicator_str}_home',
                                           f'{self.feature_indicator_str}_{self.team_str}_{self.pregame_rating_str}_0',
-                                          f'{self.feature_indicator_str}_{self.team_str}_{self.pregame_rating_str}_1',
-                                          f'{self.feature_indicator_str}_{self.team_str}_{self.pregame_rating_str}_2',
-                                          f'{self.feature_indicator_str}_{self.team_str}_{self.pregame_rating_str}_3',
-                                          'win', 'days_since_last_fight']
+                                          # f'{self.feature_indicator_str}_{self.team_str}_{self.pregame_rating_str}_1',
+                                          # f'{self.feature_indicator_str}_{self.team_str}_{self.pregame_rating_str}_2',
+                                          # f'{self.feature_indicator_str}_{self.team_str}_{self.pregame_rating_str}_3',
+                                          'win', 'days_since_last_fight', 'year', 'month', 'day']
         self.initial_player_data_columns = ['ast', 'ast_pct', 'blk', 'blk_pct', 'def_rtg', 'drb', 'drb_pct', 'efg_pct',
                                             'fg', 'fg3', 'fg3_pct', 'fg3a', 'fg3a_per_fga_pct', 'fg_pct', 'fga', 'ft',
                                             'ft_pct',
@@ -91,9 +91,9 @@ class DataManager():
         self.assign_date_since_last_game()
         self.assign_home_for_teams()
         self.calculate_team_game_rating(0)
-        self.calculate_team_game_rating(1)
-        self.calculate_team_game_rating(2)
-        self.calculate_team_game_rating(3)
+        # self.calculate_team_game_rating(1)
+        # self.calculate_team_game_rating(2)
+        # self.calculate_team_game_rating(3)
         self.scale_data()
         self.save_processed_data()
 
@@ -134,6 +134,8 @@ class DataManager():
         self.load_processed_data()
         self.scaler_dict = dict()
         for i in self.initial_team_data_columns:
+            if i == self.target:
+                continue
             scaler = QuantileTransformer()
             self.team_data[i] = scaler.fit_transform(self.team_data[i].fillna(self.team_data[i].median()).values.reshape(-1, 1))
             self.scaler_dict[i] = scaler
@@ -220,10 +222,10 @@ class DataManager():
         past_n_game_dataset_combined = self.load_past_n_game_dataset_combined(history_length, transpose_history_data)
         x2_cols = [f'{self.feature_indicator_str}_home',
                    f'{self.feature_indicator_str}_{self.team_str}_{self.pregame_rating_str}_0',
-                   f'{self.feature_indicator_str}_{self.team_str}_{self.pregame_rating_str}_1',
-                   f'{self.feature_indicator_str}_{self.team_str}_{self.pregame_rating_str}_2',
-                   f'{self.feature_indicator_str}_{self.team_str}_{self.pregame_rating_str}_3',
-                   'days_since_last_fight']
+                   # f'{self.feature_indicator_str}_{self.team_str}_{self.pregame_rating_str}_1',
+                   # f'{self.feature_indicator_str}_{self.team_str}_{self.pregame_rating_str}_2',
+                   # f'{self.feature_indicator_str}_{self.team_str}_{self.pregame_rating_str}_3',
+                   'days_since_last_fight', 'year', 'month', 'day']
 
         all_columns = ['game_key', 'team_tag', 'opponent_tag', 'date_str', self.target] + x2_cols
         all_keys = self.team_data[all_columns]
@@ -244,34 +246,35 @@ class DataManager():
 
             home = row[f'{self.feature_indicator_str}_home']
 
-            rating_0 = row[f'{self.feature_indicator_str}_{self.team_str}_{self.pregame_rating_str}_0']
-            rating_1 = row[f'{self.feature_indicator_str}_{self.team_str}_{self.pregame_rating_str}_1']
-            rating_2 = row[f'{self.feature_indicator_str}_{self.team_str}_{self.pregame_rating_str}_2']
-            rating_3 = row[f'{self.feature_indicator_str}_{self.team_str}_{self.pregame_rating_str}_3']
+            # rating_0 = row[f'{self.feature_indicator_str}_{self.team_str}_{self.pregame_rating_str}_0']
+            # rating_1 = row[f'{self.feature_indicator_str}_{self.team_str}_{self.pregame_rating_str}_1']
+            # rating_2 = row[f'{self.feature_indicator_str}_{self.team_str}_{self.pregame_rating_str}_2']
+            # rating_3 = row[f'{self.feature_indicator_str}_{self.team_str}_{self.pregame_rating_str}_3']
 
-            record_o = rows_dicts[(row['game_key'], row['opponent_tag'], row['team_tag'])].fillna(0)
+            # record_o = rows_dicts[(row['game_key'], row['opponent_tag'], row['team_tag'])].fillna(0)
 
-            rating_0_o = record_o[f'{self.feature_indicator_str}_{self.team_str}_{self.pregame_rating_str}_0']
-            rating_1_o = record_o[f'{self.feature_indicator_str}_{self.team_str}_{self.pregame_rating_str}_1']
-            rating_2_o = record_o[f'{self.feature_indicator_str}_{self.team_str}_{self.pregame_rating_str}_2']
-            rating_3_o = record_o[f'{self.feature_indicator_str}_{self.team_str}_{self.pregame_rating_str}_3']
+            # rating_0_o = record_o[f'{self.feature_indicator_str}_{self.team_str}_{self.pregame_rating_str}_0']
+            # rating_1_o = record_o[f'{self.feature_indicator_str}_{self.team_str}_{self.pregame_rating_str}_1']
+            # rating_2_o = record_o[f'{self.feature_indicator_str}_{self.team_str}_{self.pregame_rating_str}_2']
+            # rating_3_o = record_o[f'{self.feature_indicator_str}_{self.team_str}_{self.pregame_rating_str}_3']
 
-            rating_0_diff = rating_0 - rating_0_o
-            rating_1_diff = rating_1 - rating_1_o
-            rating_2_diff = rating_2 - rating_2_o
-            rating_3_diff = rating_3 - rating_3_o
+            # rating_0_diff = rating_0 - rating_0_o
+            # rating_1_diff = rating_1 - rating_1_o
+            # rating_2_diff = rating_2 - rating_2_o
+            # rating_3_diff = rating_3 - rating_3_o
 
-            days_since_last_fight = row['days_since_last_fight']
-            days_since_last_fight_o = record_o['days_since_last_fight']
-            days_since_last_fight_diff = days_since_last_fight - days_since_last_fight_o
+            # days_since_last_fight = row['days_since_last_fight']
+            # days_since_last_fight_o = record_o['days_since_last_fight']
+            # days_since_last_fight_diff = days_since_last_fight - days_since_last_fight_o
             # print(rating_0, rating_1, rating_2, rating_3, rating_0_o, rating_1_o, rating_2_o, rating_3_o, rating_0_diff, rating_1_diff, rating_2_diff, rating_3_diff, row['win'])
 
             x2.append([home,
-                       rating_0_diff,
-                       rating_1_diff,
-                       rating_2_diff,
-                       rating_3_diff,
-                       days_since_last_fight_diff])
+                       # rating_0_diff,
+                       # rating_1_diff,
+                       # rating_2_diff,
+                       # rating_3_diff,
+                       #days_since_last_fight_diff
+            ])
 
         return np.array(x1), np.array(x2), np.array(y)
 
