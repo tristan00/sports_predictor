@@ -9,6 +9,7 @@ import random
 import traceback
 import pandas as pd
 
+
 def run_naive_model():
     dm = DataManager()
     x, y = dm.get_labeled_data()
@@ -20,9 +21,8 @@ def run_naive_model():
 
 
 def get_nn_model(input_shape1, input_shape2, filters, kernel_size, pool_size, dense_top_layers, dense_layers_width,
-                  convolutional_layers, recurrent_layers, dnn_layers, network_type):
+                 convolutional_layers, recurrent_layers, dnn_layers, network_type):
     input_layer = layers.Input(shape=input_shape1)
-
 
     if network_type == 'cnn':
         x = layers.Conv1D(filters=filters, kernel_size=kernel_size, activation='relu')(input_layer)
@@ -70,32 +70,36 @@ def get_nn_model(input_shape1, input_shape2, filters, kernel_size, pool_size, de
 
 
 def optimize_nn():
-    filters = list(range(1,128))
-    kernel_size = list(range(1,10))
-    pool_size = list(range(1,10))
-    dense_top_layers = [1, 2]
-    dense_layers_width = [64]
+    filters = list(range(1, 128))
+    kernel_size = list(range(1, 10))
+    pool_size = list(range(1, 10))
+    dense_top_layers = [1, 2, 3]
+    dense_layers_width = [128]
     convolutional_layers = [1, 2, 3]
     rnn_layers = [1, 2, 3]
     dnn_layers = [1]
-    network_type = ['cnn', 'rnn']
+    network_type = ['cnn', 'rnn', 'dnn']
     # network_type = ['cnn']
 
-    history_lengths = [4, 8, 16, 32, 64, 128]
-    # history_lengths = [64]
+    # history_lengths = [4]
+    history_lengths = [64]
     transpose_history_data = [True, False]
 
     dm = DataManager()
     # dm.update_raw_datasets()
 
+    dm.scale_data()
+
     dms = dict()
     for i in history_lengths:
         for j in transpose_history_data:
-            # dm.build_timeseries(i, j)
-            # dm.combine_timeseries(i, j)
+
+            dm.build_timeseries(i, j)
+            dm.combine_timeseries(i, j)
             x1, x2, y = dm.get_labeled_data(i, j)
             x1_train, x1_val, x2_train, x2_val, y_train, y_val = train_test_split(x1, x2, y, random_state=1)
-            x1_val, x1_test, x2_val, x2_test, y_val, y_test = train_test_split(x1_val, x2_val, y_val, train_size=.5, random_state=1)
+            x1_val, x1_test, x2_val, x2_test, y_val, y_test = train_test_split(x1_val, x2_val, y_val, train_size=.5,
+                                                                               random_state=1)
             dms[(i, j)] = {'x1_train': x1_train,
                            'x1_val': x1_val,
                            'x1_test': x1_test,
@@ -126,21 +130,21 @@ def optimize_nn():
                     key = (history_lengths_choice, transpose_history_choice)
 
                     print({'filters': filters_choice,
-                                    'kernel_size': kernel_size_choice,
-                                    'pool_size': pool_size_choice,
-                                    'dense_top_layers': dense_top_layers_choice,
-                                    'dense_layers_width': dense_layers_width_choice,
-                                    'convolutional_layers': convolutional_layers_choice,
-                                    'recurrent_layers': recurrent_layers_choice,
-                                    'dnn_layers': dnn_layers_choice,
-                                    'network_type': network_type_choice,
-                                    'history_lengths': history_lengths_choice,
-                                    'transpose_history': transpose_history_choice
-                                    })
+                           'kernel_size': kernel_size_choice,
+                           'pool_size': pool_size_choice,
+                           'dense_top_layers': dense_top_layers_choice,
+                           'dense_layers_width': dense_layers_width_choice,
+                           'convolutional_layers': convolutional_layers_choice,
+                           'recurrent_layers': recurrent_layers_choice,
+                           'dnn_layers': dnn_layers_choice,
+                           'network_type': network_type_choice,
+                           'history_lengths': history_lengths_choice,
+                           'transpose_history': transpose_history_choice
+                           })
 
                     model = get_nn_model(
                         input_shape1=(dms[key]['x1_train'].shape[1],
-                                     dms[key]['x1_train'].shape[2]),
+                                      dms[key]['x1_train'].shape[2]),
                         input_shape2=(dms[key]['x2_train'].shape[1],),
                         filters=filters_choice,
                         kernel_size=kernel_size_choice,
@@ -151,7 +155,7 @@ def optimize_nn():
                         recurrent_layers=recurrent_layers_choice,
                         dnn_layers=dnn_layers_choice,
                         network_type=network_type_choice
-                        )
+                    )
                     cb = callbacks.EarlyStopping(monitor='val_loss',
                                                  min_delta=0,
                                                  patience=1,
@@ -167,7 +171,8 @@ def optimize_nn():
 
                     model = models.load_model('{}/test.h5'.format(data_path))
                     preds = np.rint(model.predict([dms[key]['x1_test'], dms[key]['x2_test']]))
-                    score = accuracy_score(dms[(history_lengths_choice, transpose_history_choice)]['y_test'], preds.astype(int))
+                    score = accuracy_score(dms[(history_lengths_choice, transpose_history_choice)]['y_test'],
+                                           preds.astype(int))
 
                     results.append({'filters': filters_choice,
                                     'kernel_size': kernel_size_choice,
@@ -186,7 +191,7 @@ def optimize_nn():
                     results = sorted(results, key=lambda x: x['accuracy'], reverse=False)
                     print(results)
 
-                    pd.DataFrame.from_dict(results).to_csv(f'{data_path}/nn_architectures.csv', index = False)
+                    pd.DataFrame.from_dict(results).to_csv(f'{data_path}/nn_architectures.csv', index=False)
                     model_built = True
                 except:
                     traceback.print_exc()
