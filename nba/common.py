@@ -9,8 +9,8 @@ import sys
 
 base_url = 'https://www.basketball-reference.com/'
 day_scores_base_url = 'https://www.basketball-reference.com/boxscores/?month={month}&day={day}&year={year}'
-data_path = r'/media/td/Samsung_T5/sports/nba'
-# data_path = r'C:\Users\TristanDelforge\Documents\sports_predictor\nba'
+# data_path = r'/media/td/Samsung_T5/sports/nba'
+data_path = r'C:\Users\TristanDelforge\Documents\sports_predictor\nba'
 db_name = 'nba_db'
 box_score_link_table_name = 'boxscore_links'
 
