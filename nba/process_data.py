@@ -86,39 +86,55 @@ class DataManager():
         self.id_columns = ['team_tag', 'team_link', 'team_name', 'opponent_tag', 'opponent_name', 'opponent_link',
                            'location', 'date_str', 'game_key', 'team_game_key', 'player_link']
 
-        self.key_columns = ['game_key', 'team_tag', 'opponent_tag', 'date_str']
+        self.key_columns = ['game_key', 'team_tag', 'opponent_tag', 'date_str', 'team_game_key']
         self.standalone_feature_columns = []
         self.diff_feature_cols = []
 
         self.testing = testing
 
+    @timeit
     def update_raw_datasets(self):
         self.load_raw_data()
         self.create_feature_target_df()
-        if self.fill_nans:
-            self.fillna()
         self.calculate_team_game_rating(0)
-        self.calculate_team_game_rating(1)
+
+        # self.calculate_team_game_rating(1)
+        # self.calculate_team_game_rating(2)
+        # self.calculate_team_game_rating(3)
         self.encode_dates()
+        print(1, self.feature_df.shape)
         self.assign_date_since_last_game()
+        print(2, self.feature_df.shape)
         self.assign_home_for_teams()
+        print(3, self.feature_df.shape)
         self.build_moving_average_features(3)
+        print(4, self.feature_df.shape)
         self.build_moving_average_features(10)
+        print(5, self.feature_df.shape)
         self.build_moving_average_features(25)
+        print(6, self.feature_df.shape)
         self.build_event_features()
+        print(7, self.feature_df.shape)
+
+        # if self.fill_nans:
+        #     self.fillna()
         if self.data_scaling:
             self.scale_data()
+
+        print(dict(self.team_data['team_game_key'].value_counts()))
         self.save_processed_data()
         self.save_columns()
         self.save_feature_df()
 
+
+    @timeit
     def encode_dates(self):
         self.team_data['date_dt'] = pd.to_datetime(self.team_data['date_str'], errors='coerce')
         self.team_data['dow'] = self.team_data['date_dt'].dt.dayofweek
         self.team_data['year'] = self.team_data['date_dt'].dt.year
         self.team_data['month'] = self.team_data['date_dt'].dt.month
 
-        merge_cols = ['team_tag', 'opponent_tag', 'game_key', 'date_str']
+        merge_cols = ['team_game_key']
         for e in ['dow', 'year', 'month']:
             for i in set(self.team_data[e]):
                 self.team_data['{0}_{1}'.format(e, i)] = self.team_data[e].apply(lambda x: x == i).astype(int)
@@ -126,6 +142,7 @@ class DataManager():
                 merge_cols.append('{0}_{1}'.format(e, i))
         self.feature_df = self.feature_df.merge(self.team_data[merge_cols])
 
+    @timeit
     def load_raw_data(self):
         if self.testing:
             self.team_data = pd.read_csv('{data_path}/{db_name}.csv'.format(data_path=data_path,
@@ -187,19 +204,22 @@ class DataManager():
                 list(set(self.initial_team_data_columns + self.standalone_feature_columns + self.diff_feature_cols))):
             if i == self.target:
                 continue
+            if i in self.team_data.columns and i in self.feature_df.columns:
+                print('col {} in both raw and features'.format(i))
             if i in self.team_data.columns:
-                scaler = QuantileTransformer()
+                scaler = eval(self.data_scaling)()
                 self.team_data[i] = scaler.fit_transform(
                     self.team_data[i].fillna(self.team_data[i].median()).values.reshape(-1, 1))
                 self.scaler_dict[(i, 'team_data')] = scaler
             if i in self.feature_df.columns:
-                scaler = QuantileTransformer()
+                print(i)
+                scaler = eval(self.data_scaling)()
                 self.feature_df[i] = scaler.fit_transform(
                     self.feature_df[i].fillna(self.feature_df[i].median()).values.reshape(-1, 1))
                 self.scaler_dict[(i, 'feature_df')] = scaler
 
     @timeit
-    def build_timeseries(self, history_length, transpose_history_data):
+    def build_timeseries(self, history_length=4, transpose_history_data=False):
         print(f'build_timeseries: {history_length} {transpose_history_data}')
         self.load_processed_data()
         self.load_columns()
@@ -254,15 +274,16 @@ class DataManager():
 
                 past_n_game_dataset[t][g] = pregame_matrix
 
-        self.save_past_n_game_dataset(past_n_game_dataset, history_length, transpose_history_data)
+        # self.save_past_n_game_dataset(past_n_game_dataset, history_length, transpose_history_data)
+        self.combine_timeseries(history_length, transpose_history_data, past_n_game_dataset)
 
     @timeit
-    def combine_timeseries(self, history_length, transpose_history_data):
+    def combine_timeseries(self, history_length, transpose_history_data, past_n_game_dataset):
         self.load_processed_data()
         self.load_columns()
         all_keys = self.team_data[['game_key', 'team_tag', 'opponent_tag', 'date_str']]
         all_keys = all_keys.drop_duplicates()
-        past_n_game_dataset = self.load_past_n_game_dataset(history_length, transpose_history_data)
+        # past_n_game_dataset = self.load_past_n_game_dataset(history_length, transpose_history_data)
 
         past_n_game_datasets_combined = dict()
         for _, row in all_keys.iterrows():
@@ -270,19 +291,25 @@ class DataManager():
             team_record = past_n_game_dataset[row['team_tag']][row['game_key']]
             opponent_record = past_n_game_dataset[row['opponent_tag']][row['game_key']]
             diff = team_record - opponent_record
-            past_n_game_datasets_combined[row['team_tag']][row['game_key']] = np.hstack([team_record,
-                                                                                         opponent_record,
-                                                                                         diff])
+            if not transpose_history_data:
+                past_n_game_datasets_combined[row['team_tag']][row['game_key']] = np.hstack([team_record,
+                                                                                             opponent_record,
+                                                                                             diff])
+            else:
+                past_n_game_datasets_combined[row['team_tag']][row['game_key']] = np.vstack([team_record,
+                                                                                             opponent_record,
+                                                                                             diff])
         self.save_past_n_game_dataset_combined(past_n_game_datasets_combined, history_length, transpose_history_data)
 
     @timeit
     def create_feature_target_df(self):
-        self.feature_df = self.team_data[['team_tag', 'opponent_tag', 'game_key', 'date_str', self.target]].copy()
+        self.feature_df = self.team_data[['team_game_key', 'game_key', 'team_tag', 'opponent_tag', self.target]].copy()
 
     @timeit
     def build_moving_average_features(self, n):
         team_features = self.team_data.copy()
         teams = set(team_features['team_tag'])
+        team_features = team_features.sort_values('date_str')
         new_features = set()
 
         def get_slope(s):
@@ -304,7 +331,7 @@ class DataManager():
 
         new_features = list(new_features)
         self.feature_df = self.feature_df.merge(
-            team_features[new_features + ['team_tag', 'opponent_tag', 'game_key', 'date_str']])
+            team_features[new_features + ['team_game_key']])
         self.standalone_feature_columns.extend(new_features)
         self.diff_feature_cols.extend(new_features)
 
@@ -322,6 +349,10 @@ class DataManager():
         feature_cols = sorted(
             list(feature_cols & set(self.standalone_feature_columns + self.key_columns + self.diff_feature_cols)))
 
+        print(team_data_cols)
+        print(self.key_columns)
+        print(set(self.team_data.columns))
+
         all_teams_data = self.team_data[team_data_cols]
         all_feature_data = self.feature_df[feature_cols]
 
@@ -332,6 +363,7 @@ class DataManager():
         for _, row in all_feature_data.iterrows():
             rows_dicts_features[(row['game_key'], row['team_tag'], row['opponent_tag'])] = row[feature_cols]
 
+        # print('build_event_features', 2, self.team_data.shape, self.feature_df.shape)
         results = list()
         for _, row in all_teams_data.iterrows():
             next_dict = dict()
@@ -345,6 +377,8 @@ class DataManager():
                 features_opponent_record = features_opponent_record.fillna(0)
                 opponent_row = opponent_row.fillna(0)
                 row = row.fillna(0)
+
+            next_dict['team_game_key'] = row['team_game_key']
 
             for i in self.standalone_feature_columns:
                 if i in feature_cols:
@@ -364,6 +398,7 @@ class DataManager():
             results.append(next_dict)
 
         new_feature_df = pd.DataFrame.from_dict(results)
+        # print('build_event_features', 2, self.team_data.shape, self.feature_df.shape, new_feature_df.shape)
         self.feature_df = self.feature_df.merge(new_feature_df)
         print('build_event_features end: {}'.format(self.feature_df.isna().sum().sum()))
 
@@ -375,18 +410,19 @@ class DataManager():
         if get_history_data:
             past_n_game_dataset_combined = self.load_past_n_game_dataset_combined(history_length,
                                                                                   transpose_history_data)
-
         all_features = self.standalone_feature_columns.copy()
 
         for i in self.diff_feature_cols:
             all_features.append('{}_diff'.format(i))
 
-        print('self.feature_df columns: {}'.format(self.feature_df.columns.tolist()))
-
-        # print('x2 features: {}'.format(all_features))
         y, x1, x2 = [], [], []
         for _, row in self.feature_df.iterrows():
-            y.append(row[self.target])
+            if row[self.target] == 0:
+                y.append([1, 0])
+            elif row[self.target] == 1:
+                y.append([0, 1])
+            else:
+                raise Exception('invalid target: {}'.format(dict(row)))
             if self.fillna:
                 row = row.fillna(0)
             if get_history_data:
@@ -402,7 +438,8 @@ class DataManager():
             lambda x: 1 if home_dict[(x['team_tag'], x['year'])] == x['location'] else 0, axis=1)
         self.standalone_feature_columns.append('feature_home')
         self.feature_df = self.feature_df.merge(
-            self.team_data[['date_str', 'team_tag', 'opponent_tag', 'game_key', 'feature_home']])
+            self.team_data[['team_game_key', 'feature_home']])
+        self.team_data = self.team_data.drop('feature_home', axis = 1)
 
     @timeit
     def assign_date_since_last_game(self):
@@ -412,7 +449,8 @@ class DataManager():
         self.standalone_feature_columns.append('days_since_last_match')
         self.diff_feature_cols.append('days_since_last_match')
         self.feature_df = self.feature_df.merge(
-            self.team_data[['date_str', 'team_tag', 'opponent_tag', 'game_key', 'days_since_last_match']])
+            self.team_data[['team_game_key', 'days_since_last_match']])
+        self.team_data = self.team_data.drop('days_since_last_match', axis = 1)
 
     @timeit
     def calculate_team_game_rating(self, rating_type):
@@ -423,7 +461,7 @@ class DataManager():
         self.diff_feature_cols.append(new_col_pre)
         self.standalone_feature_columns.append(new_col_pre)
 
-        team_data_copy = team_data_copy[['team_tag', 'opponent_tag', 'date_str', 'game_key']]
+        team_data_copy = team_data_copy[['team_game_key', 'team_tag', 'opponent_tag', 'date_str', 'game_key']]
         team_data_copy[new_col_pre] = None
         team_data_copy[new_col_post] = None
 
@@ -449,7 +487,7 @@ class DataManager():
                 r['win'], multiplier=1, rating_type=rating_type)
 
         self.feature_df = self.feature_df.merge(
-            team_data_copy[[new_col_pre, 'team_tag', 'opponent_tag', 'date_str', 'game_key']])
+            team_data_copy[[new_col_pre, 'team_game_key']])
 
     #################################################################################################################
     # Helper methods
@@ -493,13 +531,16 @@ class DataManager():
                 f'{data_path}/{past_n_game_dataset_combined_table_name}_{history_length}_{transpose_history_data}_{self.fill_nans}_{self.data_scaling}.pkl',
                 'wb') as f:
             pickle.dump(past_n_game_datasets_combined, f)
+            # print(f'save_past_n_game_dataset_combined: {data_path}/{past_n_game_dataset_combined_table_name}_{history_length}_{transpose_history_data}_{self.fill_nans}_{self.data_scaling}.pkl')
 
     @timeit
     def load_past_n_game_dataset_combined(self, history_length, transpose_history_data):
+        # print(f'load_past_n_game_dataset_combined : {data_path}/{past_n_game_dataset_combined_table_name}_{history_length}_{transpose_history_data}_{self.fill_nans}_{self.data_scaling}.pkl')
         with open(
                 f'{data_path}/{past_n_game_dataset_combined_table_name}_{history_length}_{transpose_history_data}_{self.fill_nans}_{self.data_scaling}.pkl',
                 'rb') as f:
             return pickle.load(f)
+
 
     @timeit
     def save_past_n_game_dataset(self, past_n_game_dataset, history_length, transpose_history_data):
@@ -515,6 +556,7 @@ class DataManager():
                 'rb') as f:
             return pickle.load(f)
 
+    @timeit
     def save_processed_data(self):
         self.team_data.to_csv(
             '{data_path}/{db_name}_processed_{fill_nans}_{data_scaling}.csv'.format(data_path=data_path,
@@ -531,6 +573,7 @@ class DataManager():
                                                                                     ), sep='|',
             index=False)
 
+    @timeit
     def load_processed_data(self):
         self.team_data = pd.read_csv(
             '{data_path}/{db_name}_processed_{fill_nans}_{data_scaling}.csv'.format(data_path=data_path,
@@ -545,6 +588,7 @@ class DataManager():
                                                                                     fill_nans=self.fill_nans),
             sep='|', low_memory=False)
 
+    @timeit
     def save_columns(self):
         with open('{data_path}/{db_name}.json'.format(data_path=data_path, db_name='key_columns'), 'w') as f:
             json.dump(self.key_columns, f)
@@ -560,6 +604,7 @@ class DataManager():
                   'w') as f:
             json.dump(self.initial_player_data_columns, f)
 
+    @timeit
     def load_columns(self):
         with open('{data_path}/{db_name}.json'.format(data_path=data_path, db_name='key_columns'), 'r') as f:
             self.key_columns = json.load(f)
@@ -575,6 +620,7 @@ class DataManager():
                   'r') as f:
             self.initial_player_data_columns = json.load(f)
 
+    @timeit
     def save_feature_df(self):
         self.feature_df.to_csv('{data_path}/{db_name}_{fill_nans}_{data_scaling}.csv'.format(data_path=data_path,
                                                                                              db_name='features',
@@ -583,6 +629,7 @@ class DataManager():
                                sep='|', index=False)
         # print('save_feature_df: {}'.format(self.feature_df.columns.tolist()))
 
+    @timeit
     def load_feature_df(self):
         self.feature_df = pd.read_csv(
             '{data_path}/{db_name}_{fill_nans}_{data_scaling}.csv'.format(data_path=data_path, db_name='features',
@@ -593,11 +640,10 @@ class DataManager():
 
 
 def create_data_files():
-    dm = DataManager(fill_nans=False, data_scaling=None)
+    dm = DataManager(fill_nans=False, data_scaling=None, testing=1000)
     dm.update_raw_datasets()
-    # dm.build_timeseries(4, False)
-    # dm.combine_timeseries(4, False)
-    x1, x2, y, x2_cols = dm.get_labeled_data(None, None, None)
+    dm.build_timeseries(4, True)
+    x1, x2, y, x2_cols = dm.get_labeled_data(4, True, True)
     print(x1.shape, x2.shape, y.shape)
 
 
