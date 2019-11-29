@@ -139,6 +139,25 @@ def get_new_rating(rating1, rating2, outcome, multiplier = 1, rating_type = 0):
     next_rating = min(next_rating, rating_ceiling)
     return next_rating
 
+
+def parse_float(s):
+    try:
+        return float(s)
+    except:
+        pass
+
+
+def parse_minutes_played(s):
+    s_split = str(s).split(':')
+    if len(s_split) == 2:
+        minutes_parsed = parse_float(s_split[0])
+        seconds_parsed = parse_float(s_split[1])
+        if minutes_parsed and seconds_parsed:
+            total_minutes_played = minutes_parsed + (seconds_parsed/60)
+            return total_minutes_played
+    return 0.0
+
+
 if __name__ == '__main__':
     print(get_new_rating(1000, 100, 1))
     print(get_new_rating(100, 1000, 1))
