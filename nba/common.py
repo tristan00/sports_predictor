@@ -14,10 +14,15 @@ data_path = r'/media/td/Samsung_T5/sports/nba'
 db_name = 'nba_db'
 box_score_link_table_name = 'boxscore_links'
 
+
 box_score_details_table_name = 'boxscore_details'
-processed_team_data_table_name = 'processed_team_data'
 player_detail_table_name = 'player_details'
+box_score_details_table_name_sample = 'boxscore_details_sample'
+player_detail_table_name_sample = 'player_details_sample'
+processed_team_data_table_name = 'processed_team_data'
 processed_player_data_table_name = 'processed_player_data'
+general_feature_data_table_name = 'general_features'
+
 aggregated_player_data_table_name = 'aggregated_player_data'
 combined_feature_file_data_table_name = 'combined_feature_file'
 past_n_game_dataset_table_name = 'past_n_game_dataset'

@@ -221,6 +221,7 @@ class Scraper:
                                 'opponent_name':team_2_name,
                                 'location':location,
                                 'win': 1 if float(t1_data['team_data']['pts']) > float(t2_data['team_data']['pts']) else 0,
+                                'score_diff': float(t1_data['team_data']['pts']) - float(t2_data['team_data']['pts']),
                                 'year':year,
                                 'month':month,
                                 'day':day
@@ -236,6 +237,7 @@ class Scraper:
                                 'opponent_name':team_1_name,
                                 'location':location,
                                 'win': 1 if float(t2_data['team_data']['pts']) > float(t1_data['team_data']['pts']) else 0,
+                                 'score_diff': float(t2_data['team_data']['pts']) - float(t1_data['team_data']['pts']),
                                 'year': year,
                                 'month': month,
                                 'day': day

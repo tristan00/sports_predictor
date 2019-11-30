@@ -30,6 +30,7 @@ from sklearn.preprocessing import StandardScaler, QuantileTransformer
 import collections
 from sklearn.model_selection import train_test_split
 import gc
+import traceback
 
 
 @timeit
@@ -75,12 +76,12 @@ class DataManager():
         self.pregame_rating_str = 'pregame_rating'
         self.postgame_rating_str = 'postgame_rating'
 
-        self.initial_team_data_columns = ['ast', 'ast_pct', 'blk', 'blk_pct', 'def_rtg', 'drb', 'drb_pct', 'efg_pct',
+        self.initial_team_column_list = ['ast', 'ast_pct', 'blk', 'blk_pct', 'def_rtg', 'drb', 'drb_pct', 'efg_pct',
                                           'fg', 'fg3', 'fg3_pct', 'fg3a', 'fg3a_per_fga_pct', 'fg_pct', 'fga', 'ft',
                                           'ft_pct', 'fta', 'fta_per_fga_pct', 'mp', 'off_rtg', 'orb', 'orb_pct', 'pf',
-                                          'plus_minus', 'pts', 'stl', 'stl_pct', 'tov', 'tov_pct', 'trb', 'trb_pct',
+                                          'pts', 'stl', 'stl_pct', 'tov', 'tov_pct', 'trb', 'trb_pct',
                                           'ts_pct', 'usg_pct']
-        self.initial_player_data_columns = ['ast', 'ast_pct', 'blk', 'blk_pct', 'def_rtg', 'drb', 'drb_pct', 'efg_pct',
+        self.initial_player_column_list = ['ast', 'ast_pct', 'blk', 'blk_pct', 'def_rtg', 'drb', 'drb_pct', 'efg_pct',
                                             'fg', 'fg3', 'fg3_pct', 'fg3a', 'fg3a_per_fga_pct', 'fg_pct', 'fga', 'ft',
                                             'ft_pct',
                                             'fta', 'fta_per_fga_pct', 'mp', 'off_rtg', 'orb', 'orb_pct', 'pf',
@@ -92,9 +93,11 @@ class DataManager():
                            'location', 'date_str', 'game_key', 'team_game_key', 'player_link']
 
         self.key_columns = ['game_key', 'team_tag', 'opponent_tag', 'date_str', 'team_game_key']
+        self.encoded_features = []
         self.standalone_feature_columns = []
         self.diff_feature_cols = []
-
+        self.aggregation_features = []
+        self.opponent_columns = []
         self.testing = testing
 
     @timeit
@@ -107,20 +110,15 @@ class DataManager():
         # self.calculate_team_game_rating(2)
         # self.calculate_team_game_rating(3)
         self.encode_dates()
-        print(1, self.feature_df.shape)
         self.assign_date_since_last_game()
-        print(2, self.feature_df.shape)
         self.assign_home_for_teams()
-        print(3, self.feature_df.shape)
-        self.build_moving_average_features(5)
-        print(4, self.feature_df.shape)
-        # self.build_moving_average_features(10)
-        # print(5, self.feature_df.shape)
-        # self.build_moving_average_features(25)
-        self.build_moving_average_features(100)
-        print(6, self.feature_df.shape)
-        self.build_event_features()
-        print(7, self.feature_df.shape)
+        self.add_opponent_features()
+        # self.build_team_moving_average_features(1)
+        self.build_team_moving_average_features(3)
+        self.build_team_moving_average_features(5)
+        self.build_team_moving_average_features(10)
+        self.build_team_moving_average_features(100)
+        self.generate_team_encoded_features()
 
         if self.data_scaling:
             self.scale_data()
@@ -129,43 +127,6 @@ class DataManager():
         self.save_processed_data()
         self.save_columns()
         self.save_feature_df()
-
-    @timeit
-    def get_labeled_data(self, history_length, get_history_data, team_encoding_size,
-                                    team_encoding_type,
-                         player_encoding_1_size,
-                                player_encoding_2_size,
-                         player_encoding_type):
-        self.load_processed_data()
-        self.load_feature_df()
-        self.load_columns()
-        if get_history_data:
-            past_n_game_dataset_combined = self.load_past_n_game_dataset_combined(history_length,
-                                                                                  team_encoding_size = team_encoding_size,
-                                                                                  team_encoding_type = team_encoding_type,
-                                                                                  player_encoding_1_size = player_encoding_1_size,
-                                                                                  player_encoding_2_size=player_encoding_2_size,
-                                                                                  player_encoding_type = player_encoding_type,)
-        all_features = self.standalone_feature_columns.copy()
-
-        for i in self.diff_feature_cols:
-            all_features.append('{}_diff'.format(i))
-
-        y, x1, x2 = [], [], []
-        for _, row in self.feature_df.iterrows():
-            if row[self.target] == 0:
-                y.append([1, 0])
-            elif row[self.target] == 1:
-                y.append([0, 1])
-            else:
-                raise Exception('invalid target: {}'.format(dict(row)))
-            if self.fillna:
-                row = row.fillna(0)
-            if get_history_data:
-                x1.append(past_n_game_dataset_combined[row['team_tag']][row['game_key']])
-            x2.append(row[all_features])
-
-        return np.array(x1), np.array(x2), np.array(y), all_features
 
 
     @timeit
@@ -216,10 +177,10 @@ class DataManager():
     # Time series creation
 
     @timeit
-    def build_team_timeseries(self, history_length, team_encoding_size, team_encoding_type):
-        teams = set(self.team_data['team_tag'])
+    def build_team_timeseries(self, history_length):
+        teams = set(self.feature_df['team_tag'])
 
-        team_data_opponent = self.team_data.copy()
+        team_data_opponent = self.feature_df.copy()
         team_data_opponent['temp_column'] = team_data_opponent['team_tag']
         team_data_opponent['team_tag'] = team_data_opponent['opponent_tag']
         team_data_opponent['opponent_tag'] = team_data_opponent['temp_column']
@@ -228,44 +189,25 @@ class DataManager():
         team_data_opponent['team_game_key'] = team_data_opponent.apply(
             lambda x: str([str(x['date_str']), str(x['team_tag']), str(x['opponent_tag'])]), axis=1)
 
-        opponent_columns = list()
-        for i in self.initial_team_data_columns:
-            team_data_opponent['{}_opponent'.format(i)] = team_data_opponent[i]
-            opponent_columns.append('{}_opponent'.format(i))
 
-        team_data_combined_with_opponent = self.team_data.merge(
-            team_data_opponent[['team_tag', 'opponent_tag', 'game_key'] + opponent_columns])
-
-        for i in self.initial_team_data_columns:
-            team_data_combined_with_opponent['{}_diff'.format(i)] = team_data_combined_with_opponent[i] - team_data_combined_with_opponent['{}_opponent'.format(i)]
+        missing_features = list()
+        for i in self.encoded_features:
+            if i not in self.feature_df.columns:
+                print('{} not in team_data_combined_with_opponent'.format(i))
+                missing_features.append(i)
+            elif self.feature_df[i].isna().sum() > 1:
+                if (self.feature_df[i].isna().sum() / self.feature_df.shape[0]) == 1.0:
+                     self.feature_df[i] = self.feature_df[i].fillna(0)
+                self.feature_df[i] = self.feature_df[i].fillna(self.feature_df[i].median())
+                print('feature {0} has {1} nans'.format(i, self.feature_df[i].isna().sum()))
 
         past_n_game_dataset = dict()
         temp_team_df_dict = dict()
-
-
-        combined_columns = self.initial_team_data_columns + opponent_columns
-
-        encoder_1 = Encoder(team_encoding_type, team_encoding_size, 'player_encoding_1', None)
-        try:
-            encoder_1.load()
-        except:
-            encoder_1.fit(team_data_combined_with_opponent[combined_columns].values)
-
-        preds = encoder_1.transform(team_data_combined_with_opponent[combined_columns].values)
-        encoded_cols = [i for i in range(encoder_1.encoder_dims)]
-        team_data_combined_with_opponent = team_data_combined_with_opponent.set_index(['team_tag', 'date_str', 'game_key'])
-        team_data_combined_with_opponent = pd.DataFrame(data = preds,
-                                        index = team_data_combined_with_opponent.index,
-                                                        columns=encoded_cols)
-        team_data_combined_with_opponent = team_data_combined_with_opponent.reset_index()
-
-
         for t in tqdm.tqdm(teams):
-            team_data_copy = team_data_combined_with_opponent[team_data_combined_with_opponent['team_tag'] == t].copy()
-            team_data_copy = team_data_copy.sort_values('date_str')
+            team_data_copy = self.feature_df[self.feature_df['team_tag'] == t].copy()
+
             temp_team_df_dict[t] = team_data_copy
 
-        np_arrays = []
         for t in tqdm.tqdm(teams):
             past_n_game_dataset[t] = dict()
             temp_team_df_dict[t] = temp_team_df_dict[t].sort_values('date_str')
@@ -275,16 +217,12 @@ class DataManager():
 
             for g in game_ids:
                 g_iloc = temp_team_df_dict[t].index.get_loc(g)
-                pregame_matrix = temp_team_df_dict[t].iloc[g_iloc-history_length:g_iloc][encoded_cols].fillna(0).values
-
+                pregame_matrix = temp_team_df_dict[t].iloc[g_iloc-history_length:g_iloc][self.encoded_features].fillna(0).values
                 while pregame_matrix.shape[0] < history_length:
-                    new_array = np.array([[0 for _ in encoded_cols]])
+                    new_array = np.array([[0 for _ in self.encoded_features]])
                     pregame_matrix = np.vstack([new_array, pregame_matrix])
 
                 past_n_game_dataset[t][g] = pregame_matrix
-
-                if team_encoding_type:
-                    np_arrays.append(pregame_matrix)
 
         return past_n_game_dataset
 
@@ -330,15 +268,11 @@ class DataManager():
 
 
         print('build_player_timeseries 3, build first encoder')
-
-        print(dict(player_data_copy[self.initial_player_data_columns].isna().sum()/player_data_copy.shape[0]))
+        print(dict(player_data_copy[self.initial_player_column_list].isna().sum()/player_data_copy.shape[0]))
 
         encoder_1 = Encoder(player_encoding_type, player_encoding_1_size, 'player_encoding_1', None)
-        try:
-            encoder_1.load()
-        except:
-            encoder_1.fit(player_data_copy[self.initial_player_data_columns].values)
-        preds = encoder_1.transform(player_data_copy[self.initial_player_data_columns])
+        encoder_1.fit(player_data_copy[self.initial_player_column_list].values)
+        preds = encoder_1.transform(player_data_copy[self.initial_player_column_list])
         player_data_copy = player_data_copy.set_index(['player_link', 'date_str', 'team_game_key'])
         encoded_cols = [i for i in range(encoder_1.encoder_dims)]
         player_data_copy = pd.DataFrame(data = preds,
@@ -398,29 +332,14 @@ class DataManager():
 
         del result_dict, player_result_dict, player_ordering_dict, player_data_copy
         gc.collect()
-
-        # print('build_player_timeseries 7')
-        # if player_encoding_type:
-        #     np_arrays = np.vstack(list(result_opponent_dict.values()))
-        #     encoder_2 = Encoder(player_encoding_type, player_encoding_2_size, 'player_encoding_2', None)
-        #     try:
-        #         encoder_2.load()
-        #     except:
-        #         encoder_2.fit(np_arrays)
-        #     for i in tqdm.tqdm(result_opponent_dict.keys()):
-        #         result_opponent_dict[i] = encoder_2.transform(result_opponent_dict[i])
         return result_opponent_dict
 
     @timeit
     def combine_timeseries(self, past_n_game_team_dataset,
                                 past_n_game_player_dataset,
                                 history_length,
-                                team_encoding_size,
-                                team_encoding_type,
-                                player_encoding_1_size,
-                                player_encoding_2_size,
-                                player_encoding_type):
-        print(f'combine_timeseries: {history_length}, {team_encoding_size}, {team_encoding_type}, {player_encoding_1_size}, {player_encoding_2_size}, {player_encoding_type}')
+                                ):
+        print(f'combine_timeseries: {history_length}')
         self.load_processed_data()
         self.load_columns()
         all_keys = self.team_data[['game_key', 'team_tag', 'opponent_tag', 'date_str', 'team_game_key']]
@@ -432,240 +351,228 @@ class DataManager():
             past_n_game_datasets_combined.setdefault(row['team_tag'], dict())
             team_record = past_n_game_team_dataset[row['team_tag']][row['game_key']]
             opponent_record = past_n_game_team_dataset[row['opponent_tag']][row['game_key']]
-            player_record = past_n_game_player_dataset[row['team_game_key']]
+            # player_record = past_n_game_player_dataset[row['team_game_key']]
             diff = team_record - opponent_record
+
             past_n_game_datasets_combined[row['team_tag']][row['game_key']] = np.hstack([team_record,
                                                                                               opponent_record,
-                                                                                             diff,
-                                                                                             player_record])
-
-
+                                                                                         ])
         self.save_past_n_game_dataset_combined(past_n_game_datasets_combined,
-                                               history_length,
-                                team_encoding_size,
-                                team_encoding_type,
-                                player_encoding_1_size,
-                                player_encoding_2_size,
-                                player_encoding_type)
-
-
+                                               history_length
+                                                )
 
     @timeit
-    def build_timeseries(self, history_length, team_encoding_size, team_encoding_type, player_encoding_1_size,
-                                player_encoding_2_size,
-                                player_encoding_type):
-        print(f'build_timeseries: {history_length}, {team_encoding_size}, {team_encoding_type}, {player_encoding_1_size}, {player_encoding_2_size}, {player_encoding_type}')
+    def build_timeseries(self, history_length):
+        print(f'build_timeseries: {history_length}')
         self.load_processed_data()
+        self.load_feature_df()
         self.load_columns()
-        past_n_game_player_dataset = self.build_player_timeseries(history_length, player_encoding_1_size, player_encoding_2_size, player_encoding_type)
-        past_n_game_team_dataset = self.build_team_timeseries(history_length, team_encoding_size, team_encoding_type)
+        past_n_game_player_dataset = None
+        # past_n_game_player_dataset = self.build_player_timeseries(history_length, player_encoding_1_size, player_encoding_2_size, player_encoding_type)
+        past_n_game_team_dataset = self.build_team_timeseries(history_length)
 
 
         # self.save_past_n_game_dataset(past_n_game_dataset, history_length, transpose_history_data)
         self.combine_timeseries(past_n_game_team_dataset,
                                 past_n_game_player_dataset,
-                                history_length,
-                                team_encoding_size,
-                                team_encoding_type,
-                                player_encoding_1_size,
-                                player_encoding_2_size,
-                                player_encoding_type)
+                                history_length)
+
+    #################################################################################################################
+    # Output
+
+    @timeit
+    def get_labeled_data(self, history_length):
+        self.load_processed_data()
+        self.load_feature_df()
+        self.load_columns()
+        past_n_game_dataset_combined = self.load_past_n_game_dataset_combined(history_length)
+        all_features = self.standalone_feature_columns + self.aggregation_features
+
+
+        invalid_features = list()
+        missing_features = list()
+        for i in all_features:
+            if i not in self.feature_df.columns:
+                print('{} not in feature_df'.format(i))
+                missing_features.append(i)
+            elif self.feature_df[i].isna().sum() > 1:
+                print('feature {0} has {1} nans'.format(i, self.feature_df[i].isna().sum()))
+                if (self.feature_df[i].isna().sum() / self.feature_df.shape[0]) == 1.0:
+                     self.feature_df[i] = self.feature_df[i].fillna(0)
+                self.feature_df[i] = self.feature_df[i].fillna(self.feature_df[i].median())
+        self.feature_df = self.feature_df.drop(invalid_features, axis = 1)
+        all_features = [i for i in all_features if i not in missing_features or i in invalid_features]
+
+        y, x1, x2 = [], [], []
+        for _, row in self.feature_df.iterrows():
+            if row[self.target] == 0:
+                y.append([1, 0])
+            elif row[self.target] == 1:
+                y.append([0, 1])
+            else:
+                raise Exception('invalid target: {}'.format(dict(row)))
+            x1.append(past_n_game_dataset_combined[row['team_tag']][row['game_key']])
+            x2.append(row[all_features])
+
+        x1 = np.array(x1)
+        x2 = np.array(x2)
+        y = np.array(y)
+
+        # print(np.isnan(x1).sum(), np.isnan(x2).sum(), np.isnan(y).sum())
+        return np.nan_to_num(x1), np.nan_to_num(np.array(x2)), y, all_features
 
     #################################################################################################################
     # Feature creation
+
+    @timeit
+    def add_opponent_features(self):
+        team_data_opponent = self.feature_df.copy()
+        team_data_opponent['temp_column'] = team_data_opponent['team_tag']
+        team_data_opponent['team_tag'] = team_data_opponent['opponent_tag']
+        team_data_opponent['opponent_tag'] = team_data_opponent['temp_column']
+        team_data_opponent['game_key'] = team_data_opponent.apply(
+            lambda x: str(sorted([str(x['date_str']), str(x['team_tag']), str(x['opponent_tag'])])), axis=1)
+        team_data_opponent['team_game_key'] = team_data_opponent.apply(
+            lambda x: str([str(x['date_str']), str(x['team_tag']), str(x['opponent_tag'])]), axis=1)
+
+        for i in self.initial_team_column_list + self.standalone_feature_columns:
+            team_data_opponent['{}_opponent'.format(i)] = team_data_opponent[i]
+            self.opponent_columns.append('{}_opponent'.format(i))
+
+        self.feature_df = self.feature_df.merge(
+            team_data_opponent[['team_tag', 'opponent_tag', 'game_key'] + self.opponent_columns])
+
+        for i in self.initial_team_column_list + self.standalone_feature_columns:
+            try:
+                print(i, type(self.feature_df[i]), type(self.feature_df['{}_opponent'.format(i)]))
+                print(i, self.feature_df[i].dtype, self.feature_df['{}_opponent'.format(i)].dtype)
+                self.feature_df['{}_diff'.format(i)] = self.feature_df[i] - self.feature_df['{}_opponent'.format(i)]
+                self.diff_feature_cols.append('{}_diff'.format(i))
+            except:
+                traceback.print_exc()
+
+    def generate_team_encoded_features(self):
+        columns = list(set(self.initial_team_column_list + self.opponent_columns + self.diff_feature_cols + self.standalone_feature_columns))
+        for dims in [8]:
+            for method in ['pca', 'dense_autoencoder']:
+                encoder = Encoder(method, dims, 'team_features_{0}_{1}'.format(dims, method), None)
+                encoder.fit(self.feature_df[columns].values)
+                preds = encoder.transform(self.feature_df[columns].values)
+                encoded_cols = ['encoded_col_dense_autoencoder_{0}_{1}_{2}'.format(dims, method, i) for i in range(encoder.encoder_dims)]
+                features_encoded = pd.DataFrame(data = preds,
+                                                    index = self.feature_df.index,
+                                                    columns=encoded_cols)
+                self.feature_df = self.feature_df.join(features_encoded)
+                self.encoded_features.extend(features_encoded)
+
+
     @timeit
     def create_feature_target_df(self):
-        self.feature_df = self.team_data[['team_game_key', 'game_key', 'team_tag', 'opponent_tag', self.target]].copy()
+        self.feature_df = self.team_data.copy()
         self.feature_df = self.feature_df.set_index('team_game_key')
 
     @timeit
-    def build_moving_average_features(self, n):
-        team_features = self.team_data.copy()
+    def build_team_moving_average_features(self, n):
+        team_features = self.feature_df.copy()
         teams = set(team_features['team_tag'])
         team_features = team_features.sort_values('date_str')
         new_features = set()
 
-        def get_slope(s):
-            slope, _, _, _, _ = stats.linregress(list(range(s.shape[0])), s.tolist())
-            return slope
-
         for t in tqdm.tqdm(teams):
-            for c in self.initial_team_data_columns:
+            for c in self.initial_team_column_list + self.opponent_columns + self.diff_feature_cols + self.standalone_feature_columns:
                 col_name1 = f'{self.feature_indicator_str}_{self.team_str}_rl_avg_{c}_{n}'
-                col_name2 = f'{self.feature_indicator_str}_{self.team_str}_rl_trend_{c}_{n}'
+                # col_name2 = f'{self.feature_indicator_str}_{self.team_str}_rl_diff_{c}_{n}'
 
-                team_features.loc[team_features['team_tag'] == t, col_name1] = \
-                self.team_data[self.team_data['team_tag'] == t].shift(periods=1).rolling(window=n)[c].mean()
+                team_features.loc[team_features['team_tag'] == t, col_name1] = team_features[team_features['team_tag'] == t].shift(periods=1).rolling(window=n)[c].mean()
                 new_features.add(col_name1)
 
-                team_features.loc[team_features['team_tag'] == t, col_name2] = \
-                self.team_data[self.team_data['team_tag'] == t].shift(periods=1).rolling(window=n)[c].apply(get_slope)
-                new_features.add(col_name2)
+                # team_features.loc[team_features['team_tag'] == t, col_name2] = \
+                # self.team_data[self.team_data['team_tag'] == t].shift(periods=1).rolling(window=n)[c].apply(lambda x: x[1] - x[0])
+                # new_features.add(col_name2)
 
         new_features = list(new_features)
-
-        team_features = team_features[new_features + ['team_game_key']]
-        team_features = team_features.set_index('team_game_key')
-        self.feature_df = self.feature_df.join(team_features)
-
-        self.standalone_feature_columns.extend(new_features)
-        self.diff_feature_cols.extend(new_features)
-
-        self.standalone_feature_columns = sorted(list(set(self.standalone_feature_columns)))
-        self.diff_feature_cols = sorted(list(set(self.diff_feature_cols)))
-
-    @timeit
-    def build_event_features(self):
-        print('build_event_features start: {}'.format(self.feature_df.isna().sum().sum()))
-        team_data_cols = set(self.team_data.columns)
-        feature_cols = set(self.feature_df.columns)
-
-        team_data_cols = sorted(
-            list(team_data_cols & set(self.standalone_feature_columns + self.key_columns + self.diff_feature_cols)))
-        feature_cols = sorted(
-            list(feature_cols & set(self.standalone_feature_columns + self.key_columns + self.diff_feature_cols)))
-
-        print(team_data_cols)
-        print(self.key_columns)
-        print(set(self.team_data.columns))
-
-        all_teams_data = self.team_data[team_data_cols]
-        all_feature_data = self.feature_df[feature_cols]
-
-        rows_dicts_team_data = dict()
-        for _, row in all_teams_data.iterrows():
-            rows_dicts_team_data[(row['game_key'], row['team_tag'], row['opponent_tag'])] = row[team_data_cols]
-        rows_dicts_features = dict()
-        for _, row in all_feature_data.iterrows():
-            rows_dicts_features[(row['game_key'], row['team_tag'], row['opponent_tag'])] = row[feature_cols]
-
-        print('build_event_features', 2, self.team_data.shape, self.feature_df.shape)
-        merge_cols = ['team_game_key']
-
-        results = list()
-        for _, row in tqdm.tqdm(all_teams_data.iterrows()):
-            next_dict = dict()
-
-            features_record = rows_dicts_features[(row['game_key'], row['team_tag'], row['opponent_tag'])]
-            features_opponent_record = rows_dicts_features[(row['game_key'], row['opponent_tag'], row['team_tag'])]
-            opponent_row = rows_dicts_team_data[(row['game_key'], row['opponent_tag'], row['team_tag'])]
-
-            if self.fill_nans:
-                features_record = features_record.fillna(0)
-                features_opponent_record = features_opponent_record.fillna(0)
-                opponent_row = opponent_row.fillna(0)
-                row = row.fillna(0)
-
-            next_dict['team_game_key'] = row['team_game_key']
-
-            for i in self.standalone_feature_columns:
-                if i in team_data_cols and i not in feature_cols:
-                    next_dict[i] = row[i]
-                    merge_cols.append(i)
-
-            for i in self.diff_feature_cols:
-                if i in feature_cols:
-                    r1 = features_record[i]
-                    r2 = features_opponent_record[i]
-                    next_dict['{}_diff'.format(i)] = r1 - r2
-                    merge_cols.append('{}_diff'.format(i))
-                elif i in team_data_cols:
-                    r1 = row[i]
-                    r2 = opponent_row[i]
-                    next_dict['{}_diff'.format(i)] = r1 - r2
-                    merge_cols.append('{}_diff'.format(i))
-            results.append(next_dict)
-        merge_cols = list(set(merge_cols))
-
-        print('build_event_features', 3, self.team_data.shape, self.feature_df.shape)
-        new_feature_df = pd.DataFrame.from_dict(results)
-        new_feature_df = new_feature_df[merge_cols + ['team_game_key']]
-        new_feature_df = new_feature_df.set_index('team_game_key')
-        self.feature_df = self.feature_df.join(new_feature_df)
-        print('build_event_features end: {}'.format(self.feature_df.isna().sum().sum()))
+        self.aggregation_features.extend(new_features)
+        self.aggregation_features = sorted(list(set(self.aggregation_features)))
+        self.feature_df = self.feature_df.join(team_features[new_features])
 
 
 
     @timeit
     def assign_home_for_teams(self):
-        team_data_copy = self.team_data.copy()
+        team_data_copy = self.feature_df.copy()
         home_dict = find_team_home_loc(team_data_copy)
         team_data_copy['feature_home'] = team_data_copy.apply(
             lambda x: 1 if home_dict[(x['team_tag'], x['year'])] == x['location'] else 0, axis=1)
         self.standalone_feature_columns.append('feature_home')
-        team_data_copy = team_data_copy[['team_game_key', 'feature_home']]
-        team_data_copy = team_data_copy.set_index('team_game_key')
+        team_data_copy = team_data_copy[['feature_home']]
         self.feature_df = self.feature_df.join(team_data_copy)
 
     @timeit
     def assign_date_since_last_game(self):
-        team_data_copy = self.team_data.copy()
+        team_data_copy = self.feature_df.copy()
         team_data_copy = team_data_copy.sort_values('date_str')
         team_data_copy['date_dt'] = pd.to_datetime(team_data_copy['date_str'], errors='coerce')
         team_data_copy['days_since_last_match'] = team_data_copy.groupby('team_tag')['date_dt'].diff()
         team_data_copy['days_since_last_match'] = team_data_copy['days_since_last_match'].dt.days
         self.standalone_feature_columns.append('days_since_last_match')
         self.diff_feature_cols.append('days_since_last_match')
-        team_data_copy = team_data_copy.set_index('team_game_key')
         self.feature_df = self.feature_df.join(team_data_copy[['days_since_last_match']])
 
     @timeit
     def encode_dates(self):
-        team_data_copy = self.team_data.copy()
+        team_data_copy = self.feature_df.copy()
         team_data_copy['date_dt'] = pd.to_datetime(self.team_data['date_str'], errors='coerce')
         team_data_copy['dow'] = team_data_copy['date_dt'].dt.dayofweek
         team_data_copy['year'] = team_data_copy['date_dt'].dt.year
         team_data_copy['month'] = team_data_copy['date_dt'].dt.month
 
-        merge_cols = ['team_game_key']
+        merge_cols = []
         for e in ['dow', 'year', 'month']:
-            for i in set(team_data_copy[e]):
+            for i in set(team_data_copy[e].dropna()):
                 team_data_copy['{0}_{1}'.format(e, i)] = team_data_copy[e].apply(lambda x: x == i).astype(int)
                 self.standalone_feature_columns.append('{0}_{1}'.format(e, i))
                 merge_cols.append('{0}_{1}'.format(e, i))
         merge_cols = list(set(merge_cols))
 
         team_data_copy = team_data_copy[merge_cols]
-        team_data_copy = team_data_copy.set_index('team_game_key')
         self.feature_df = self.feature_df.join(team_data_copy)
 
     @timeit
     def calculate_team_game_rating(self, rating_type):
-        team_data_copy = self.team_data.sort_values('date_str').copy()
+        self.feature_df = self.feature_df.sort_values('date_str').copy()
         'feature_team_pregame_rating_0'
         new_col_pre = f'feature_team_pregame_rating_{rating_type}'
         new_col_post = f'feature_team_postgame_rating_{rating_type}'
         self.diff_feature_cols.append(new_col_pre)
         self.standalone_feature_columns.append(new_col_pre)
 
-        team_data_copy = team_data_copy[['team_game_key', 'team_tag', 'opponent_tag', 'date_str', 'game_key']]
-        team_data_copy[new_col_pre] = None
-        team_data_copy[new_col_post] = None
+        self.feature_df[new_col_pre] = None
+        self.feature_df[new_col_post] = None
 
-        for i, r in tqdm.tqdm(self.team_data.iterrows()):
-            team_previous_record = self.get_most_recent_team_record_before_date(team_data_copy, r['team_tag'],
+        for i, r in tqdm.tqdm(self.feature_df.iterrows()):
+            team_previous_record = self.get_most_recent_team_record_before_date(self.feature_df, r['team_tag'],
                                                                                 r['date_str'])
-            opponent_previous_record = self.get_most_recent_team_record_before_date(team_data_copy, r['opponent_tag'],
+            opponent_previous_record = self.get_most_recent_team_record_before_date(self.feature_df, r['opponent_tag'],
                                                                                     r['date_str'])
 
-            if team_previous_record.empty:
+            if team_previous_record.empty or pd.isna(team_previous_record[new_col_post]):
                 team_previous_rating = starting_rating
             else:
                 team_previous_rating = team_previous_record[new_col_post]
 
-            if opponent_previous_record.empty:
+            if opponent_previous_record.empty or pd.isna(opponent_previous_record[new_col_post]):
                 opponent_previous_rating = starting_rating
             else:
                 opponent_previous_rating = opponent_previous_record[new_col_post]
-            team_data_copy.loc[i, new_col_pre] = team_previous_rating
-            team_data_copy.loc[i, new_col_post] = get_new_rating(
+
+            print(type(team_previous_rating), type(opponent_previous_rating))
+            self.feature_df.loc[i, new_col_pre] = team_previous_rating
+            self.feature_df.loc[i, new_col_post] = get_new_rating(
                 team_previous_rating,
                 opponent_previous_rating,
                 r['win'], multiplier=1, rating_type=rating_type)
 
-
-        team_data_copy = team_data_copy.set_index('team_game_key')
-        self.feature_df = self.feature_df.join(team_data_copy[[new_col_pre]])
+        self.standalone_feature_columns.append(new_col_pre)
 
 
     def process_minutes_played(self):
@@ -679,7 +586,7 @@ class DataManager():
     @timeit
     def fillna(self):
         for i in sorted(
-                list(set(self.initial_team_data_columns + self.standalone_feature_columns + self.diff_feature_cols))):
+                list(set(self.initial_team_column_list + self.standalone_feature_columns + self.diff_feature_cols))):
             if i == self.target:
                 continue
             if i in self.team_data.columns:
@@ -693,7 +600,7 @@ class DataManager():
     def scale_data(self):
         self.scaler_dict = dict()
         for i in sorted(
-                list(set(self.initial_team_data_columns + self.initial_player_data_columns + self.standalone_feature_columns + self.diff_feature_cols))):
+                list(set(self.initial_team_column_list + self.initial_player_column_list + self.standalone_feature_columns + self.diff_feature_cols + self.opponent_columns + self.encoded_features))):
             if i == self.target:
                 continue
             if i in self.team_data.columns and i in self.feature_df.columns:
@@ -751,25 +658,17 @@ class DataManager():
 
     @timeit
     def save_past_n_game_dataset_combined(self, past_n_game_datasets_combined, history_length,
-                                team_encoding_size,
-                                team_encoding_type,
-                                player_encoding_size_1,
-                                player_encoding_size_2,
-                                player_encoding_type):
+                               ):
         with open(
-                f'{data_path}/{past_n_game_dataset_combined_table_name}_{history_length}_{self.fill_nans}_{self.data_scaling}_{team_encoding_size}_{team_encoding_type}_{player_encoding_size_1}_{player_encoding_size_2}_{player_encoding_type}.pkl',
+                f'{data_path}/{past_n_game_dataset_combined_table_name}_{history_length}_{self.fill_nans}_{self.data_scaling}.pkl',
                 'wb') as f:
             pickle.dump(past_n_game_datasets_combined, f)
 
     @timeit
     def load_past_n_game_dataset_combined(self, history_length,
-                                team_encoding_size,
-                                team_encoding_type,
-                                player_encoding_1_size,
-                                player_encoding_2_size,
-                                player_encoding_type):
+                               ):
         with open(
-                f'{data_path}/{past_n_game_dataset_combined_table_name}_{history_length}_{self.fill_nans}_{self.data_scaling}_{team_encoding_size}_{team_encoding_type}_{player_encoding_1_size}_{player_encoding_2_size}_{player_encoding_type}.pkl',
+                f'{data_path}/{past_n_game_dataset_combined_table_name}_{history_length}_{self.fill_nans}_{self.data_scaling}.pkl',
                 'rb') as f:
             return pickle.load(f)
 
@@ -824,33 +723,52 @@ class DataManager():
     def save_columns(self):
         with open('{data_path}/{db_name}.json'.format(data_path=data_path, db_name='key_columns'), 'w') as f:
             json.dump(self.key_columns, f)
-        with open('{data_path}/{db_name}.json'.format(data_path=data_path, db_name='standalone_feature_columns'),
+        with open('{data_path}/{db_name}.json'.format(data_path=data_path, db_name='aggregation_features'),
                   'w') as f:
+            json.dump(self.aggregation_features, f)
+        with open('{data_path}/{db_name}.json'.format(data_path=data_path, db_name='standalone_feature_columns'),
+              'w') as f:
             json.dump(self.standalone_feature_columns, f)
-        with open('{data_path}/{db_name}.json'.format(data_path=data_path, db_name='diff_feature_cols'), 'w') as f:
+        with open('{data_path}/{db_name}.json'.format(data_path=data_path, db_name='diff_feature_cols'),
+              'w') as f:
             json.dump(self.diff_feature_cols, f)
+        with open('{data_path}/{db_name}.json'.format(data_path=data_path, db_name='opponent_columns'), 'w') as f:
+            json.dump(self.opponent_columns, f)
         with open('{data_path}/{db_name}.json'.format(data_path=data_path, db_name='initial_team_column_list'),
                   'w') as f:
-            json.dump(self.initial_team_data_columns, f)
+            json.dump(self.initial_team_column_list, f)
         with open('{data_path}/{db_name}.json'.format(data_path=data_path, db_name='initial_player_column_list'),
                   'w') as f:
-            json.dump(self.initial_player_data_columns, f)
+             json.dump(self.initial_player_column_list, f)
+        with open('{data_path}/{db_name}.json'.format(data_path=data_path, db_name='encoded_features'),
+                  'w') as f:
+             json.dump(self.encoded_features, f)
 
     @timeit
     def load_columns(self):
         with open('{data_path}/{db_name}.json'.format(data_path=data_path, db_name='key_columns'), 'r') as f:
             self.key_columns = json.load(f)
-        with open('{data_path}/{db_name}.json'.format(data_path=data_path, db_name='standalone_feature_columns'),
+        with open('{data_path}/{db_name}.json'.format(data_path=data_path, db_name='aggregation_features'),
                   'r') as f:
+            self.aggregation_features = json.load(f)
+        with open('{data_path}/{db_name}.json'.format(data_path=data_path, db_name='standalone_feature_columns'),
+              'r') as f:
             self.standalone_feature_columns = json.load(f)
-        with open('{data_path}/{db_name}.json'.format(data_path=data_path, db_name='diff_feature_cols'), 'r') as f:
+        with open('{data_path}/{db_name}.json'.format(data_path=data_path, db_name='diff_feature_cols'),
+              'r') as f:
             self.diff_feature_cols = json.load(f)
+        with open('{data_path}/{db_name}.json'.format(data_path=data_path, db_name='opponent_columns'), 'r') as f:
+            self.opponent_columns = json.load(f)
         with open('{data_path}/{db_name}.json'.format(data_path=data_path, db_name='initial_team_column_list'),
                   'r') as f:
-            self.initial_team_data_columns = json.load(f)
+            self.initial_team_column_list = json.load(f)
         with open('{data_path}/{db_name}.json'.format(data_path=data_path, db_name='initial_player_column_list'),
                   'r') as f:
-            self.initial_player_data_columns = json.load(f)
+            self.initial_player_column_list = json.load(f)
+        with open('{data_path}/{db_name}.json'.format(data_path=data_path, db_name='encoded_features'),
+                  'r') as f:
+            self.encoded_features = json.load(f)
+
 
     @timeit
     def save_feature_df(self):
@@ -871,6 +789,32 @@ class DataManager():
         # print('load_feature_df: {}'.format(self.feature_df.columns.tolist()))
 
 
+
+
+@timeit
+def get_recurrent_autoencoder(input_shape,
+                          bottleneck_size,
+                          dense_layer_activations,
+                          bottleneck_layer_activations,
+                          target_activations):
+
+    from keras import backend as K
+
+    input_layer = layers.Input(shape=input_shape)
+    encoder = layers.LSTM(128)(input_layer)
+    encoder = layers.Dense(32, activation=dense_layer_activations)(encoder)
+    encoder_out = layers.Dense(bottleneck_size, activation=bottleneck_layer_activations, name='bottleneck')(encoder)
+    decoder = layers.Dense(32, activation=dense_layer_activations)(encoder_out)
+    decoder = layers.Dense(128, activation=dense_layer_activations)(decoder)
+    decoder = K.expand_dims(decoder, axis = -1)
+    out = layers.LSTM(128, return_sequences=True)(decoder)
+
+    autoencoder = models.Model(input_layer, out)
+    encoder = models.Model(input_layer, encoder_out)
+    autoencoder.compile(loss='mse', optimizer='adam', metrics=['mse'])
+    return autoencoder, encoder
+
+
 @timeit
 def get_dense_autoencoder(input_shape,
                           bottleneck_size,
@@ -878,23 +822,29 @@ def get_dense_autoencoder(input_shape,
                           bottleneck_layer_activations,
                           target_activations):
     input_layer = layers.Input(shape=input_shape)
-    encoder = layers.Dense(128, activation=dense_layer_activations)(input_layer)
+    encoder = layers.Dense(256, activation=dense_layer_activations)(input_layer)
+    encoder = layers.BatchNormalization()(encoder)
+    encoder = layers.Dense(256, activation=dense_layer_activations)(encoder)
+    encoder = layers.BatchNormalization()(encoder)
+    encoder = layers.Dense(256, activation=dense_layer_activations)(encoder)
+    encoder = layers.BatchNormalization()(encoder)
+    encoder = layers.Dense(256, activation=dense_layer_activations)(encoder)
+    encoder = layers.BatchNormalization()(encoder)
+    encoder = layers.Dense(128, activation=dense_layer_activations)(encoder)
     encoder = layers.BatchNormalization()(encoder)
     encoder = layers.Dense(64, activation=dense_layer_activations)(encoder)
-    encoder = layers.BatchNormalization()(encoder)
-    encoder = layers.Dense(32, activation=dense_layer_activations)(encoder)
-    encoder = layers.BatchNormalization()(encoder)
-    encoder = layers.Dense(16, activation=dense_layer_activations)(encoder)
-    encoder = layers.BatchNormalization()(encoder)
     encoder_out = layers.Dense(bottleneck_size, activation=bottleneck_layer_activations, name='bottleneck')(encoder)
-    decoder = layers.Dense(16, activation=dense_layer_activations)(encoder_out)
-    decoder = layers.BatchNormalization()(decoder)
-    decoder = layers.Dense(32, activation=dense_layer_activations)(decoder)
-    decoder = layers.BatchNormalization()(decoder)
-    decoder = layers.Dense(64, activation=dense_layer_activations)(decoder)
+    decoder = layers.Dense(64, activation=dense_layer_activations)(encoder_out)
     decoder = layers.BatchNormalization()(decoder)
     decoder = layers.Dense(128, activation=dense_layer_activations)(decoder)
     decoder = layers.BatchNormalization()(decoder)
+    decoder = layers.Dense(256, activation=dense_layer_activations)(decoder)
+    decoder = layers.BatchNormalization()(decoder)
+    decoder = layers.Dense(256, activation=dense_layer_activations)(decoder)
+    decoder = layers.BatchNormalization()(decoder)
+    decoder = layers.Dense(256, activation=dense_layer_activations)(decoder)
+    decoder = layers.BatchNormalization()(decoder)
+    decoder = layers.Dense(256, activation=dense_layer_activations)(decoder)
     out = layers.Dense(input_shape[0], activation=target_activations)(decoder)
 
     autoencoder = models.Model(input_layer, out)
@@ -916,8 +866,6 @@ class Encoder:
 
     @timeit
     def fit(self, x):
-
-
         if len(x.shape) == 3:
             x = x.reshape((x.shape[0], x.shape[1]*x.shape[2]))
         assert len(x.shape) == 2
@@ -929,28 +877,35 @@ class Encoder:
         if self.encoder_type == 'pca':
             for i in x_df.columns:
                 scaler = StandardScaler()
-                if x_df[i].isna().sum() / x_df.shpae[0] == 1.0:
-                    x_df[i].fillna(0)
+                if (x_df[i].isna().sum() / x_df.shape[0]) == 1.0:
+                    x_df[i] = x_df[i].fillna(0)
                 x_df[i]= scaler.fit_transform(x_df[i].fillna(x_df[i].median()).values.reshape(-1, 1))
                 self.scaler_dict[i] = scaler
             self.model = PCA(n_components=self.encoder_dims)
-            self.model.fit(x)
-
-        if self.encoder_type == 'dense_autoencoder':
+            self.model.fit(x_df)
+        if self.encoder_type in ['dense_autoencoder', 'recurrent_autoencoder']:
             for i in x_df.columns:
                 scaler = StandardScaler()
-                if x_df[i].isna().sum() / x_df.shape[0] == 1.0:
-                    x_df[i].fillna(0)
+                if (x_df[i].isna().sum() / x_df.shape[0]) == 1.0:
+                     x_df[i] = x_df[i].fillna(0)
                 x_df[i]= scaler.fit_transform(x_df[i].fillna(x_df[i].median()).values.reshape(-1, 1))
                 # x_df[i] *= 2
                 # x_df[i] -= 1
                 self.scaler_dict[i] = scaler
 
-            self.autoencoder, self.encoder = get_dense_autoencoder(input_shape = (x_df.shape[1],),
-                                              bottleneck_size = self.encoder_dims,
-                                              dense_layer_activations = 'softplus',
-                                              bottleneck_layer_activations = 'linear',
-                                              target_activations= 'linear')
+            if self.encoder_type == 'dense_autoencoder':
+                self.autoencoder, self.encoder = get_dense_autoencoder(input_shape = (x_df.shape[1],),
+                                                  bottleneck_size = self.encoder_dims,
+                                                  dense_layer_activations = 'elu',
+                                                  bottleneck_layer_activations = 'linear',
+                                                  target_activations= 'linear')
+            if self.encoder_type == 'recurrent_autoencoder':
+                x = np.expand_dims(x_df.values, 2)
+                self.autoencoder, self.encoder = get_recurrent_autoencoder(input_shape = (x_df.shape[1], 1),
+                                                  bottleneck_size = self.encoder_dims,
+                                                  dense_layer_activations = 'elu',
+                                                  bottleneck_layer_activations = 'linear',
+                                                  target_activations= 'linear')
             x_train, x_val = train_test_split(x_df, random_state=1)
 
             early_stopping = callbacks.EarlyStopping(monitor='val_loss',
@@ -958,7 +913,7 @@ class Encoder:
                                          patience=1,
                                          verbose=0, mode='auto')
             self.autoencoder.fit(x_train, x_train, validation_data=(x_val, x_val), callbacks=[early_stopping],
-                           epochs=200, batch_size=128)
+                           epochs=200, batch_size=32)
             self.save()
 
             for layer in self.autoencoder.layers:
@@ -981,14 +936,19 @@ class Encoder:
 
         if self.encoder_type == 'pca':
             for i in x_df.columns:
-                x_df[i] = self.scaler_dict[i].transform(x_df[i].fillna(0).values.reshape(-1, 1))
+                if (x_df[i].isna().sum() / x_df.shape[0]) == 1.0:
+                     x_df[i] = x_df[i].fillna(0)
+                x_df[i]= self.scaler_dict[i].transform(x_df[i].fillna(x_df[i].median()).values.reshape(-1, 1))
             return self.model.transform(x_df)
         if self.encoder_type == 'dense_autoencoder':
 
             for i in x_df.columns:
-                x_df[i] = self.scaler_dict[i].transform(x_df[i].fillna(0).values.reshape(-1, 1))
+                if (x_df[i].isna().sum() / x_df.shape[0]) == 1.0:
+                     x_df[i] = x_df[i].fillna(0)
+                x_df[i]= self.scaler_dict[i].transform(x_df[i].fillna(x_df[i].median()).values.reshape(-1, 1))
 
-            return self.encoder.predict(x_df)
+            preds = self.encoder.predict(x_df)
+            return preds
 
     @timeit
     def save(self):
@@ -1018,8 +978,8 @@ class Encoder:
 def create_data_files():
     dm = DataManager(fill_nans=False, data_scaling=None, testing=1000)
     dm.update_raw_datasets()
-    dm.build_timeseries(4, True)
-    x1, x2, y, x2_cols = dm.get_labeled_data(4, True, True)
+    dm.build_timeseries(4)
+    x1, x2, y, x2_cols = dm.get_labeled_data(4)
     print(x1.shape, x2.shape, y.shape)
 
 
