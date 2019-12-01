@@ -304,6 +304,6 @@ class Scraper:
 
 
 if __name__ == '__main__':
-    scraper = Scraper(start_date = datetime.date(2015, 6, 30), end_date = datetime.date(2019, 6, 30), clear_data=False)
+    scraper = Scraper(start_date = datetime.date(2005, 6, 30), end_date = datetime.date.today(), clear_data=False)
     scraper.scrape_date_range_boxscore_links_and_details()
 
