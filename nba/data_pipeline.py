@@ -199,25 +199,31 @@ def build_team_aggregates(team_df, history_length_list, team_columns_to_aggregat
 
     for t in tqdm.tqdm(teams):
         for n in history_length_list:
-            temp_avg_df = team_aggregate_dict[t].shift(periods=1).rolling(window=n)[team_columns_to_aggregate].mean()
-            temp_min_df = team_aggregate_dict[t].shift(periods=1).rolling(window=n)[team_columns_to_aggregate].min()
-            temp_max_df = team_aggregate_dict[t].shift(periods=1).rolling(window=n)[team_columns_to_aggregate].max()
-            temp_var_df = team_aggregate_dict[t].shift(periods=1).rolling(window=n)[team_columns_to_aggregate].var()
-            temp_skew_df = team_aggregate_dict[t].shift(periods=1).rolling(window=n)[team_columns_to_aggregate].skew()
+            if n > 1:
+                temp_avg_df = team_aggregate_dict[t].shift(periods=1).rolling(window=n)[team_columns_to_aggregate].mean()
+                temp_min_df = team_aggregate_dict[t].shift(periods=1).rolling(window=n)[team_columns_to_aggregate].min()
+                temp_max_df = team_aggregate_dict[t].shift(periods=1).rolling(window=n)[team_columns_to_aggregate].max()
+                temp_var_df = team_aggregate_dict[t].shift(periods=1).rolling(window=n)[team_columns_to_aggregate].var()
+                temp_skew_df = team_aggregate_dict[t].shift(periods=1).rolling(window=n)[team_columns_to_aggregate].skew()
 
-            temp_avg_df.columns = [f'team_aggregate_past_{n}_game_avg_{c}' for c in temp_avg_df.columns]
-            temp_min_df.columns = [f'team_aggregate_past_{n}_game_min_{c}' for c in temp_min_df.columns]
-            temp_max_df.columns = [f'team_aggregate_past_{n}_game_max_{c}' for c in temp_max_df.columns]
-            temp_var_df.columns = [f'team_aggregate_past_{n}_game_var_{c}' for c in temp_var_df.columns]
-            temp_skew_df.columns = [f'team_aggregate_past_{n}_game_skew_{c}' for c in temp_skew_df.columns]
+                temp_avg_df.columns = [f'team_aggregate_past_{n}_game_avg_{c}' for c in temp_avg_df.columns]
+                temp_min_df.columns = [f'team_aggregate_past_{n}_game_min_{c}' for c in temp_min_df.columns]
+                temp_max_df.columns = [f'team_aggregate_past_{n}_game_max_{c}' for c in temp_max_df.columns]
+                temp_var_df.columns = [f'team_aggregate_past_{n}_game_var_{c}' for c in temp_var_df.columns]
+                temp_skew_df.columns = [f'team_aggregate_past_{n}_game_skew_{c}' for c in temp_skew_df.columns]
 
-            temp_avg_df = temp_avg_df.join(temp_min_df)
-            temp_avg_df = temp_avg_df.join(temp_max_df)
-            temp_avg_df = temp_avg_df.join(temp_var_df)
-            temp_avg_df = temp_avg_df.join(temp_skew_df)
-            new_features.update(set(temp_avg_df.columns))
+                temp_avg_df = temp_avg_df.join(temp_min_df)
+                temp_avg_df = temp_avg_df.join(temp_max_df)
+                temp_avg_df = temp_avg_df.join(temp_var_df)
+                temp_avg_df = temp_avg_df.join(temp_skew_df)
+                new_features.update(set(temp_avg_df.columns))
 
-            team_aggregate_dict[t] = team_aggregate_dict[t].join(temp_avg_df)
+                team_aggregate_dict[t] = team_aggregate_dict[t].join(temp_avg_df)
+            else:
+                temp_avg_df = team_aggregate_dict[t].shift(periods=1).rolling(window=n)[team_columns_to_aggregate].mean()
+                temp_avg_df.columns = [f'team_aggregate_past_{n}_game_avg_{c}' for c in temp_avg_df.columns]
+                new_features.update(set(temp_avg_df.columns))
+                team_aggregate_dict[t] = team_aggregate_dict[t].join(temp_avg_df)
 
     team_df = pd.concat(list(team_aggregate_dict.values()))
     team_df = team_df.reset_index()
@@ -303,7 +309,7 @@ def get_player_game_aggregates(team_df, player_df, player_columns_to_aggregate):
     return team_df, new_cols
 
 @timeit
-def build_lower_dims_representations(df, columns, dim_list, encoding_type_list):
+def build_encoded_representations(df, columns, dim_list, encoding_type_list):
     df_copy = df.copy()
     df_copy = df_copy.set_index('key')
     for e_type in encoding_type_list:
@@ -313,14 +319,14 @@ def build_lower_dims_representations(df, columns, dim_list, encoding_type_list):
                 encoder.fit(df_copy[columns].values)
                 preds = encoder.transform(df_copy[columns].values)
                 pred_df = pd.DataFrame(data = preds,
-                                       index = df_copy.index)
+                                       index = df_copy.index,
+                                       columns = [i for i in range(d)])
                 pred_df.to_csv(f'{data_path}/{encoded_file_base_name}_{e_type}_{d}.csv', sep = '|', index = True)
 
 
 @timeit
 def process_general_features(aggregation_windows, encoding_sizes, encoding_types):
-    team_features = ['team_pregame_rating_0', 'team_pregame_rating_1', 'team_pregame_rating_2', 'team_pregame_rating_3',
-                     'days_since_last_match', 'home', 'year', 'month']
+    team_features = ['team_pregame_rating_0', 'days_since_last_match', 'home', 'year', 'month']
     targets = ['win', 'score_diff']
     team_columns_to_aggregate = ['ast', 'ast_pct', 'blk', 'blk_pct', 'def_rtg', 'drb', 'drb_pct', 'efg_pct',
                                       'fg', 'fg3', 'fg3_pct', 'fg3a', 'fg3a_per_fga_pct', 'fg_pct', 'fga', 'ft',
@@ -345,7 +351,7 @@ def process_general_features(aggregation_windows, encoding_sizes, encoding_types
     team_features.extend(new_features)
 
     feature_df = team_df[team_features + targets + ['key']]
-    build_lower_dims_representations(feature_df, team_features, encoding_sizes, encoding_types)
+    build_encoded_representations(feature_df, team_features, encoding_sizes, encoding_types)
     feature_df = fill_nans(feature_df)
     feature_df_scaled = scale_data(feature_df, team_features)
     save_general_feature_file(feature_df, feature_df_scaled)
@@ -398,8 +404,7 @@ def generate_time_series_features(history_lengths):
                                       'pts', 'stl', 'stl_pct', 'tov', 'tov_pct', 'trb', 'trb_pct',
                                       'ts_pct', 'usg_pct', 'home', 'win', 'days_since_last_match', 'score_diff']
 
-    time_series_cols = team_columns_to_aggregate + ['team_pregame_rating_0', 'team_pregame_rating_1',
-                                                    'team_pregame_rating_2', 'team_pregame_rating_3',
+    time_series_cols = team_columns_to_aggregate + ['team_pregame_rating_0',
                                                     'days_since_last_match']
     team_df_scaled = scale_data(team_df, time_series_cols)
 
@@ -462,10 +467,10 @@ def run_pipeline(sample = False):
         encoding_types = ['pca']
         history_lengths = [8]
     else:
-        aggregation_windows = [1, 3, 5, 10, 20, 50, 100]
-        encoding_sizes = [None, 8, 16, 32, 64, 128, 256, 512, 1024]
-        # encoding_types = ['pca', 'dense_autoencoder']
-        encoding_types = ['pca']
+        aggregation_windows = [1, 3, 50]
+        encoding_sizes = [32, 256]
+        encoding_types = ['pca', 'dense_autoencoder']
+        # encoding_types = ['pca']
         history_lengths = [4, 8, 16]
 
     # process_raw_data(sample = sample)
