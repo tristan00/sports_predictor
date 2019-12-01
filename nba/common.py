@@ -107,6 +107,9 @@ def get_new_rating(rating1, rating2, outcome, multiplier = 1, rating_type = 0):
     :param outcome:
     :param multiplier:
     :return:
+
+    Rating strategy 0 outperforms the other 3.
+
     '''
 
     if rating_type == 0:

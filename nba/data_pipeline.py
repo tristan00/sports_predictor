@@ -16,6 +16,7 @@ general_feature_scaled_data_table_name,
 team_time_series_file_loc,
 encoded_file_base_name
 )
+from nba.encoders import Encoder
 from collections import Counter
 import tqdm
 import traceback
@@ -32,12 +33,14 @@ import copy
 
 @timeit
 def get_raw_data(sample):
+    team_df = pd.read_csv(f'{data_path}/{box_score_details_table_name}.csv', sep = '|', low_memory=False)
+    player_df = pd.read_csv(f'{data_path}/{player_detail_table_name}.csv', sep = '|', low_memory=False)
+    print(f'team df shape: {team_df.shape}, player df shape: {player_df.shape}')
     if sample:
-        team_df = pd.read_csv(f'{data_path}/{box_score_details_table_name_sample}.csv', sep = '|', low_memory=False)
-        player_df = pd.read_csv(f'{data_path}/{player_detail_table_name_sample}.csv', sep = '|', low_memory=False)
-    else:
-        team_df = pd.read_csv(f'{data_path}/{box_score_details_table_name}.csv', sep = '|', low_memory=False)
-        player_df = pd.read_csv(f'{data_path}/{player_detail_table_name}.csv', sep = '|', low_memory=False)
+        team_df = team_df[(team_df['year'] >= 2019)&(team_df['month'] >= 3)]
+        player_df = player_df[(player_df['year'] >= 2019)&(player_df['month'] >= 3)]
+        print(f'team df sample shape: {team_df.shape}, player df sample shape: {player_df.shape}')
+
 
     return team_df, player_df
 
@@ -154,12 +157,14 @@ def process_raw_data(sample = False):
     team_df, player_df = get_raw_data(sample=sample)
     team_df = process_minutes_played(team_df)
     player_df = process_minutes_played(player_df)
+
+
     team_df = assign_home_for_teams(team_df)
     team_df = assign_date_since_last_game(team_df)
     team_df = calculate_team_game_rating(team_df, 0)
-    team_df = calculate_team_game_rating(team_df, 1)
-    team_df = calculate_team_game_rating(team_df, 2)
-    team_df = calculate_team_game_rating(team_df, 3)
+    # team_df = calculate_team_game_rating(team_df, 1)
+    # team_df = calculate_team_game_rating(team_df, 2)
+    # team_df = calculate_team_game_rating(team_df, 3)
     save_processed_data(team_df, player_df)
 
 
@@ -185,43 +190,41 @@ def build_team_aggregates(team_df, history_length_list, team_columns_to_aggregat
     team_df = team_df.sort_values('date_str')
     new_features = set()
 
+    team_df_copy = team_df.copy()
+    team_df_copy = team_df_copy.set_index('key')
+    team_aggregate_dict = dict()
+
+    for t in tqdm.tqdm(teams):
+        team_aggregate_dict[t] = team_df_copy[team_df_copy['team_tag'] == t]
+
     for t in tqdm.tqdm(teams):
         for n in history_length_list:
-            for c in team_columns_to_aggregate:
-                if n > 1:
-                    col_name_avg = f'team_{c}_past_{n}_game_avg'
-                    col_name_min = f'team_{c}_past_{n}_game_min'
-                    col_name_max = f'team_{c}_past_{n}_game_max'
-                    col_name_var = f'team_{c}_past_{n}_game_var'
+            temp_avg_df = team_aggregate_dict[t].shift(periods=1).rolling(window=n)[team_columns_to_aggregate].mean()
+            temp_min_df = team_aggregate_dict[t].shift(periods=1).rolling(window=n)[team_columns_to_aggregate].min()
+            temp_max_df = team_aggregate_dict[t].shift(periods=1).rolling(window=n)[team_columns_to_aggregate].max()
+            temp_var_df = team_aggregate_dict[t].shift(periods=1).rolling(window=n)[team_columns_to_aggregate].var()
+            temp_skew_df = team_aggregate_dict[t].shift(periods=1).rolling(window=n)[team_columns_to_aggregate].skew()
 
-                    team_df.loc[team_df['team_tag'] == t, col_name_avg] = team_df[team_df['team_tag'] == t].shift(periods=1).rolling(window=n)[c].mean()
-                    team_df.loc[team_df['team_tag'] == t, col_name_min] = team_df[team_df['team_tag'] == t].shift(periods=1).rolling(window=n)[c].min()
-                    team_df.loc[team_df['team_tag'] == t, col_name_max] = team_df[team_df['team_tag'] == t].shift(periods=1).rolling(window=n)[c].max()
-                    team_df.loc[team_df['team_tag'] == t, col_name_var] = team_df[team_df['team_tag'] == t].shift(periods=1).rolling(window=n)[c].var()
+            temp_avg_df.columns = [f'team_aggregate_past_{n}_game_avg_{c}' for c in temp_avg_df.columns]
+            temp_min_df.columns = [f'team_aggregate_past_{n}_game_min_{c}' for c in temp_min_df.columns]
+            temp_max_df.columns = [f'team_aggregate_past_{n}_game_max_{c}' for c in temp_max_df.columns]
+            temp_var_df.columns = [f'team_aggregate_past_{n}_game_var_{c}' for c in temp_var_df.columns]
+            temp_skew_df.columns = [f'team_aggregate_past_{n}_game_skew_{c}' for c in temp_skew_df.columns]
 
-                    new_features.add(col_name_avg)
-                    new_features.add(col_name_min)
-                    new_features.add(col_name_max)
-                    new_features.add(col_name_var)
-                else:
-                    col_name_avg = f'team_{c}_past_{n}_game_avg'
-                    team_df.loc[team_df['team_tag'] == t, col_name_avg] = team_df[team_df['team_tag'] == t].shift(periods=1).rolling(window=n)[c].mean()
-                    new_features.add(col_name_avg)
+            temp_avg_df = temp_avg_df.join(temp_min_df)
+            temp_avg_df = temp_avg_df.join(temp_max_df)
+            temp_avg_df = temp_avg_df.join(temp_var_df)
+            temp_avg_df = temp_avg_df.join(temp_skew_df)
+            new_features.update(set(temp_avg_df.columns))
+
+            team_aggregate_dict[t] = team_aggregate_dict[t].join(temp_avg_df)
+
+    team_df = pd.concat(list(team_aggregate_dict.values()))
+    team_df = team_df.reset_index()
+
+    team_df = team_df.fillna(0)
 
     new_features = list(new_features)
-    for t in tqdm.tqdm(teams):
-        years_active = set(team_df[team_df['team_tag'] == t]['year'])
-        sub_team_df = team_df[(team_df['team_tag'] == t)][new_features]
-
-        for y in years_active:
-            for col_name in new_features:
-                if sub_team_df[col_name].isna().all():
-                    fill_value = team_df[col_name].median()
-                else:
-                    fill_value = sub_team_df[col_name].median()
-
-                team_df.loc[(team_df['team_tag'] == t)&(team_df['year'] == y), col_name] = team_df.loc[(team_df['team_tag'] == t)&(team_df['year'] == y), col_name].fillna(fill_value)
-
     return team_df, new_features
 
 
@@ -242,7 +245,7 @@ def compare_features_to_opponent(df, columns_to_compare):
 
     opponent_columns = []
     for i in columns_to_compare:
-        col_name = '{}_opponent'.format(i)
+        col_name = '{}_opponent_feature'.format(i)
         temp_array = df_copy[i].astype(float).values
         # print(f'opponent_columns: {i}, {temp_array.shape}')
         df_copy[col_name] = temp_array
@@ -252,9 +255,9 @@ def compare_features_to_opponent(df, columns_to_compare):
 
     diff_features = []
     for i in columns_to_compare:
-        col_name = '{}_diff'.format(i)
+        col_name = '{}_diff_vs_opponent_feature'.format(i)
         s1 = df[i].astype(float).values
-        s2 = df['{}_opponent'.format(i)].astype(float).values
+        s2 = df['{}_opponent_feature'.format(i)].astype(float).values
         df[col_name] = s1 - s2
         diff_features.append(col_name)
 
@@ -265,6 +268,7 @@ def compare_features_to_opponent(df, columns_to_compare):
 
 @timeit
 def fill_nans(df):
+    #TODO: add subset na filling
     return df.fillna(df.median())
 
 
@@ -278,31 +282,43 @@ def scale_data(feature_df, columns_to_scale):
 
 
 def get_player_game_aggregates(team_df, player_df, player_columns_to_aggregate):
+    player_df = player_df.fillna(0)
     player_df_group_avg = player_df.groupby(['team_link', 'opponent_link', 'year', 'month', 'day'])[player_columns_to_aggregate].mean()
     player_df_group_var = player_df.groupby(['team_link', 'opponent_link', 'year', 'month', 'day'])[player_columns_to_aggregate].var()
     player_df_group_skew = player_df.groupby(['team_link', 'opponent_link', 'year', 'month', 'day'])[player_columns_to_aggregate].skew()
-    player_df_group_avg.columns = [f'player_game_aggregate_{i}_avg' for i in player_columns_to_aggregate]
-    player_df_group_var.columns = [f'player_game_aggregate_{i}_var' for i in player_columns_to_aggregate]
-    player_df_group_skew.columns = [f'player_game_aggregate_{i}_skew' for i in player_columns_to_aggregate]
+    player_df_group_max = player_df.groupby(['team_link', 'opponent_link', 'year', 'month', 'day'])[player_columns_to_aggregate].max()
+    player_df_group_median = player_df.groupby(['team_link', 'opponent_link', 'year', 'month', 'day'])[player_columns_to_aggregate].median()
+    player_df_group_avg.columns = [f'player_stats_aggregated_by_game_{i}_avg' for i in player_columns_to_aggregate]
+    player_df_group_var.columns = [f'player_stats_aggregated_by_game_{i}_var' for i in player_columns_to_aggregate]
+    player_df_group_skew.columns = [f'player_stats_aggregated_by_game_{i}_skew' for i in player_columns_to_aggregate]
+    player_df_group_max.columns = [f'player_stats_aggregated_by_game_{i}_max' for i in player_columns_to_aggregate]
+    player_df_group_median.columns = [f'player_stats_aggregated_by_game_{i}_median' for i in player_columns_to_aggregate]
     player_df_group_avg = player_df_group_avg.join(player_df_group_var)
     player_df_group_avg = player_df_group_avg.join(player_df_group_skew)
+    player_df_group_avg = player_df_group_avg.join(player_df_group_max)
+    player_df_group_avg = player_df_group_avg.join(player_df_group_median)
 
     new_cols = player_df_group_avg.columns
     team_df = team_df.merge(player_df_group_avg.reset_index())
     return team_df, new_cols
 
-
-def build_lower_dims_representations(df, columns, dim_list):
-    for d in dim_list:
-        pca = decomposition.PCA(n_components=d)
-        preds = pca.fit_transform(df[columns])
-        pred_df = pd.DataFrame(data = preds,
-                               index = df.index)
-        pred_df.to_csv(f'{data_path}/{encoded_file_base_name}_{d}.csv', sep = '|', index = False)
+@timeit
+def build_lower_dims_representations(df, columns, dim_list, encoding_type_list):
+    df_copy = df.copy()
+    df_copy = df_copy.set_index('key')
+    for e_type in encoding_type_list:
+        for d in dim_list:
+            if d:
+                encoder = Encoder(e_type, d, f'{encoded_file_base_name}_{e_type}_{d}', None)
+                encoder.fit(df_copy[columns].values)
+                preds = encoder.transform(df_copy[columns].values)
+                pred_df = pd.DataFrame(data = preds,
+                                       index = df_copy.index)
+                pred_df.to_csv(f'{data_path}/{encoded_file_base_name}_{e_type}_{d}.csv', sep = '|', index = True)
 
 
 @timeit
-def process_general_features(categorical_strategy = 'dictionary_encoding'):
+def process_general_features(aggregation_windows, encoding_sizes, encoding_types):
     team_features = ['team_pregame_rating_0', 'team_pregame_rating_1', 'team_pregame_rating_2', 'team_pregame_rating_3',
                      'days_since_last_match', 'home', 'year', 'month']
     targets = ['win', 'score_diff']
@@ -323,16 +339,15 @@ def process_general_features(categorical_strategy = 'dictionary_encoding'):
     team_df, new_cols = get_player_game_aggregates(team_df, player_df, player_columns_to_aggregate)
     print(len(team_columns_to_aggregate), len(new_cols))
     team_columns_to_aggregate.extend(new_cols)
-    team_df, new_features = build_team_aggregates(team_df, [1, 5, 20], team_columns_to_aggregate)
+    team_df, new_features = build_team_aggregates(team_df, aggregation_windows, team_columns_to_aggregate)
     team_features.extend(new_features)
     team_df, new_features = compare_features_to_opponent(team_df, team_features)
     team_features.extend(new_features)
 
     feature_df = team_df[team_features + targets + ['key']]
+    build_lower_dims_representations(feature_df, team_features, encoding_sizes, encoding_types)
     feature_df = fill_nans(feature_df)
     feature_df_scaled = scale_data(feature_df, team_features)
-
-    build_lower_dims_representations(feature_df_scaled, team_features, [4, 8, 16, 32, 64, 128])
     save_general_feature_file(feature_df, feature_df_scaled)
 
 
@@ -425,7 +440,10 @@ def load_all_feature_file(history_lengths, general_features_encoding_lengths):
 
     for i in general_features_encoding_lengths:
         if i:
-            output_dict[f'encoded_general_features_{i}'] = pd.read_csv(f'{data_path}/{encoded_file_base_name}_{i}.csv', sep = '|', low_memory=False)
+            df = pd.read_csv(f'{data_path}/{encoded_file_base_name}_{i}.csv', sep = '|', low_memory=False)
+            df = df.set_index('key')
+            df = df.sort_index()
+            output_dict[f'encoded_general_features_{i}'] = df
 
     output_dict['general_features'] = feature_df
     output_dict['general_features_scaled'] = feature_scaled_df
@@ -436,11 +454,30 @@ def load_all_feature_file(history_lengths, general_features_encoding_lengths):
 # Test functions
 
 
-if __name__ == '__main__':
-    process_raw_data(sample = False)
-    process_general_features()
 
-    history_lengths = [4, 8, 16, 32, 64]
+def run_pipeline(sample = False):
+    if sample:
+        aggregation_windows = [3, 100]
+        encoding_sizes = [None, 8, 16, 32]
+        encoding_types = ['pca']
+        history_lengths = [8]
+    else:
+        aggregation_windows = [1, 3, 5, 10, 20, 50, 100]
+        encoding_sizes = [None, 8, 16, 32, 64, 128, 256, 512, 1024]
+        # encoding_types = ['pca', 'dense_autoencoder']
+        encoding_types = ['pca']
+        history_lengths = [4, 8, 16]
+
+    # process_raw_data(sample = sample)
+    process_general_features(aggregation_windows, encoding_sizes, encoding_types)
     generate_time_series_features(history_lengths)
+
+
+
+if __name__ == '__main__':
+    run_pipeline(sample = False)
+
+
+
 
 

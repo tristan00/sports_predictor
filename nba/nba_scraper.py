@@ -11,7 +11,8 @@ from nba.common import (sleep_on_error,
                     date_record_pickle_file_name,
                     box_score_record_pickle_file_name,
                     max_tries,
-                    file_lock)
+                    file_lock,
+                        timeit)
 
 from bs4 import BeautifulSoup
 import pickle
@@ -94,7 +95,7 @@ def get_score_table(soup, tag, simplicity):
 
 
 class Scraper:
-    def __init__(self, start_date = None, end_date = None, clear_data = False):
+    def __init__(self, start_date = None, end_date = None, clear_data = False, save_frequency = 100):
         self.end_date = end_date
         self.current_date = end_date
         self.start_date = start_date
@@ -105,6 +106,7 @@ class Scraper:
         if not start_date:
             self.start_date = datetime.date(1980, 1, 1)
 
+        self.save_frequency = save_frequency
         self.session = get_session()
         self.box_office_links = pd.DataFrame()
         self.box_office_details = pd.DataFrame()
@@ -116,6 +118,7 @@ class Scraper:
             self.save_data()
         self.load_data()
 
+    @timeit
     def save_data(self):
         with file_lock:
             with open('{data_path}/{file_name}.pkl'.format(data_path=data_path, file_name=date_record_pickle_file_name), 'wb') as f:
@@ -127,6 +130,16 @@ class Scraper:
             self.box_office_details.to_csv('{data_path}/{db_name}.csv'.format(data_path=data_path, db_name=box_score_details_table_name), index=False, sep = '|')
             self.player_box_office_details.to_csv('{data_path}/{db_name}.csv'.format(data_path=data_path, db_name=player_detail_table_name), index=False, sep = '|')
 
+            with open('{data_path}/{file_name}_backup.pkl'.format(data_path=data_path, file_name=date_record_pickle_file_name), 'wb') as f:
+                pickle.dump(self.dates_searched_for_links, f)
+            with open('{data_path}/{file_name}_backup.pkl'.format(data_path=data_path, file_name=box_score_record_pickle_file_name),
+                      'wb') as f:
+                    pickle.dump(self.game_links_searched, f)
+            self.box_office_links.to_csv('{data_path}/{db_name}_backup.csv'.format(data_path=data_path, db_name=box_score_link_table_name), index=False, sep = '|')
+            self.box_office_details.to_csv('{data_path}/{db_name}_backup.csv'.format(data_path=data_path, db_name=box_score_details_table_name), index=False, sep = '|')
+            self.player_box_office_details.to_csv('{data_path}/{db_name}_backup.csv'.format(data_path=data_path, db_name=player_detail_table_name), index=False, sep = '|')
+
+    @timeit
     def load_data(self):
         try:
             with file_lock:
@@ -272,27 +285,26 @@ class Scraper:
                 traceback.print_exc()
                 sleep_on_error()
 
-    def scrape_date_range_boxscore_links(self, save_data = False):
+    def scrape_date_range_boxscore_links(self):
         while self.current_date <= self.end_date and self.current_date >= self.start_date:
             self.current_date -= datetime.timedelta(days=1)
             if str(self.current_date) in self.dates_searched_for_links:
                 continue
             self.scrape_current_day_boxscore_links()
             self.dates_searched_for_links.append(str(self.current_date))
-            if save_data:
-                self.save_data()
 
-    def scrape_all_box_office_details(self, save_data = False):
+
+    def scrape_all_box_office_details(self):
         for _, i in self.box_office_links.iterrows():
             if i['box_score_url'] in self.game_links_searched:
                 continue
             print('scraping game: {}'.format(i['box_score_url']))
             self.scrape_box_office_details(i['box_score_url'], i['year'], i['month'], i['day'])
             self.game_links_searched.append(i['box_score_url'])
-            if save_data:
-                self.save_data()
+
 
     def scrape_date_range_boxscore_links_and_details(self):
+        counter = 0
         while self.current_date <= self.end_date and self.current_date >= self.start_date:
             self.current_date -= datetime.timedelta(days=1)
             if str(self.current_date) in self.dates_searched_for_links:
@@ -300,10 +312,15 @@ class Scraper:
             self.scrape_current_day_boxscore_links()
             self.dates_searched_for_links.append(str(self.current_date))
             self.scrape_all_box_office_details()
-            self.save_data()
+
+            counter += 1
+            print(f'Counter: {counter}, Save frequency: {self.save_frequency}, Modulo: {counter % self.save_frequency}')
+
+            if counter % 100 == 0:
+                self.save_data()
 
 
 if __name__ == '__main__':
-    scraper = Scraper(start_date = datetime.date(2005, 6, 30), end_date = datetime.date.today(), clear_data=False)
+    scraper = Scraper(start_date = datetime.date(1980, 6, 30), end_date = datetime.date(2019, 6, 30), clear_data=False, save_frequency = 20)
     scraper.scrape_date_range_boxscore_links_and_details()
 

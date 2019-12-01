@@ -17,184 +17,7 @@ import collections
 from sklearn.preprocessing import StandardScaler, QuantileTransformer
 from sklearn.decomposition import PCA
 import pickle
-
-
-def get_recurrent_autoencoder(input_shape,
-                          bottleneck_size,
-                          dense_layer_activations,
-                          bottleneck_layer_activations,
-                          target_activations):
-
-    from keras import backend as K
-
-    input_layer = layers.Input(shape=input_shape)
-    encoder = layers.LSTM(128)(input_layer)
-    encoder = layers.Dense(32, activation=dense_layer_activations)(encoder)
-    encoder_out = layers.Dense(bottleneck_size, activation=bottleneck_layer_activations, name='bottleneck')(encoder)
-    decoder = layers.Dense(32, activation=dense_layer_activations)(encoder_out)
-    decoder = layers.Dense(128, activation=dense_layer_activations)(decoder)
-    decoder = K.expand_dims(decoder, axis = -1)
-    out = layers.LSTM(128, return_sequences=True)(decoder)
-
-    autoencoder = models.Model(input_layer, out)
-    encoder = models.Model(input_layer, encoder_out)
-    autoencoder.compile(loss='mse', optimizer='adam', metrics=['mse'])
-    return autoencoder, encoder
-
-
-def get_dense_autoencoder(input_shape,
-                          bottleneck_size,
-                          dense_layer_activations,
-                          bottleneck_layer_activations,
-                          target_activations):
-    input_layer = layers.Input(shape=input_shape)
-    encoder = layers.Dense(256, activation=dense_layer_activations)(input_layer)
-    encoder = layers.BatchNormalization()(encoder)
-    encoder = layers.Dense(256, activation=dense_layer_activations)(encoder)
-    encoder = layers.BatchNormalization()(encoder)
-    encoder = layers.Dense(256, activation=dense_layer_activations)(encoder)
-    encoder = layers.BatchNormalization()(encoder)
-    encoder = layers.Dense(256, activation=dense_layer_activations)(encoder)
-    encoder = layers.BatchNormalization()(encoder)
-    encoder = layers.Dense(128, activation=dense_layer_activations)(encoder)
-    encoder = layers.BatchNormalization()(encoder)
-    encoder = layers.Dense(64, activation=dense_layer_activations)(encoder)
-    encoder_out = layers.Dense(bottleneck_size, activation=bottleneck_layer_activations, name='bottleneck')(encoder)
-    decoder = layers.Dense(64, activation=dense_layer_activations)(encoder_out)
-    decoder = layers.BatchNormalization()(decoder)
-    decoder = layers.Dense(128, activation=dense_layer_activations)(decoder)
-    decoder = layers.BatchNormalization()(decoder)
-    decoder = layers.Dense(256, activation=dense_layer_activations)(decoder)
-    decoder = layers.BatchNormalization()(decoder)
-    decoder = layers.Dense(256, activation=dense_layer_activations)(decoder)
-    decoder = layers.BatchNormalization()(decoder)
-    decoder = layers.Dense(256, activation=dense_layer_activations)(decoder)
-    decoder = layers.BatchNormalization()(decoder)
-    decoder = layers.Dense(256, activation=dense_layer_activations)(decoder)
-    out = layers.Dense(input_shape[0], activation=target_activations)(decoder)
-
-    autoencoder = models.Model(input_layer, out)
-    encoder = models.Model(input_layer, encoder_out)
-    autoencoder.compile(loss='mse', optimizer='adam', metrics=['mse'])
-    return autoencoder, encoder
-
-
-class Encoder:
-    def __init__(self, encoder_type, encoder_dims, encoder_id, encoder_params):
-        self.encoder_type = encoder_type
-        self.encoder_dims = encoder_dims
-        self.encoder_id = encoder_id
-        self.encoder_params = encoder_params
-        self.model = None
-        self.scaler_dict = dict()
-        self.file_path = f'{data_path}/{encoder_type}_{encoder_dims}_{encoder_id}'
-        self.scaler_file_path = f'{data_path}/{encoder_type}_{encoder_dims}_{encoder_id}_scaler'
-
-    def fit(self, x):
-        if len(x.shape) == 3:
-            x = x.reshape((x.shape[0], x.shape[1]*x.shape[2]))
-        assert len(x.shape) == 2
-
-        x_df = pd.DataFrame(data = x,
-                            columns=list(range(x.shape[1])))
-
-
-        if self.encoder_type == 'pca':
-            for i in x_df.columns:
-                scaler = StandardScaler()
-                if (x_df[i].isna().sum() / x_df.shape[0]) == 1.0:
-                    x_df[i] = x_df[i].fillna(0)
-                x_df[i]= scaler.fit_transform(x_df[i].fillna(x_df[i].median()).values.reshape(-1, 1))
-                self.scaler_dict[i] = scaler
-            self.model = PCA(n_components=self.encoder_dims)
-            self.model.fit(x_df)
-        if self.encoder_type in ['dense_autoencoder', 'recurrent_autoencoder']:
-            for i in x_df.columns:
-                scaler = StandardScaler()
-                if (x_df[i].isna().sum() / x_df.shape[0]) == 1.0:
-                     x_df[i] = x_df[i].fillna(0)
-                x_df[i]= scaler.fit_transform(x_df[i].fillna(x_df[i].median()).values.reshape(-1, 1))
-                # x_df[i] *= 2
-                # x_df[i] -= 1
-                self.scaler_dict[i] = scaler
-
-            if self.encoder_type == 'dense_autoencoder':
-                self.autoencoder, self.encoder = get_dense_autoencoder(input_shape = (x_df.shape[1],),
-                                                  bottleneck_size = self.encoder_dims,
-                                                  dense_layer_activations = 'elu',
-                                                  bottleneck_layer_activations = 'linear',
-                                                  target_activations= 'linear')
-            if self.encoder_type == 'recurrent_autoencoder':
-                x = np.expand_dims(x_df.values, 2)
-                self.autoencoder, self.encoder = get_recurrent_autoencoder(input_shape = (x_df.shape[1], 1),
-                                                  bottleneck_size = self.encoder_dims,
-                                                  dense_layer_activations = 'elu',
-                                                  bottleneck_layer_activations = 'linear',
-                                                  target_activations= 'linear')
-            x_train, x_val = train_test_split(x_df, random_state=1)
-
-            early_stopping = callbacks.EarlyStopping(monitor='val_loss',
-                                         min_delta=0,
-                                         patience=1,
-                                         verbose=0, mode='auto')
-            self.autoencoder.fit(x_train, x_train, validation_data=(x_val, x_val), callbacks=[early_stopping],
-                           epochs=200, batch_size=32)
-            self.save()
-
-            for layer in self.autoencoder.layers:
-                print(layer.name)
-
-            for layer in self.encoder.layers:
-                print(layer.name)
-
-            self.model_output = self.encoder.predict(x)
-            print(self.model_output.shape)
-            return self.model_output
-
-    def transform(self, x):
-        if len(x.shape) == 3:
-            x = x.reshape((x.shape[0], x.shape[1]*x.shape[2]))
-        assert len(x.shape) == 2
-
-        x_df = pd.DataFrame(data = x,
-                            columns=list(range(x.shape[1])))
-
-        if self.encoder_type == 'pca':
-            for i in x_df.columns:
-                if (x_df[i].isna().sum() / x_df.shape[0]) == 1.0:
-                     x_df[i] = x_df[i].fillna(0)
-                x_df[i]= self.scaler_dict[i].transform(x_df[i].fillna(x_df[i].median()).values.reshape(-1, 1))
-            return self.model.transform(x_df)
-        if self.encoder_type == 'dense_autoencoder':
-
-            for i in x_df.columns:
-                if (x_df[i].isna().sum() / x_df.shape[0]) == 1.0:
-                     x_df[i] = x_df[i].fillna(0)
-                x_df[i]= self.scaler_dict[i].transform(x_df[i].fillna(x_df[i].median()).values.reshape(-1, 1))
-
-            preds = self.encoder.predict(x_df)
-            return preds
-
-    def save(self):
-        if self.encoder_type == 'pca':
-            with open('{file_path}.pkl'.format(file_path=self.file_path), 'wb') as f:
-                pickle.dump(self.model, f)
-
-        if self.encoder_type == 'dense_autoencoder':
-            models.save_model(self.encoder, '{file_path}_encoder.pkl'.format(file_path=self.file_path))
-            models.save_model(self.autoencoder, '{file_path}_autoencoder.pkl'.format(file_path=self.file_path))
-        with open('{file_path}.pkl'.format(file_path=self.scaler_file_path), 'wb') as f:
-            pickle.dump(self.scaler_dict, f)
-
-    def load(self):
-        if self.encoder_type == 'pca':
-            with open('{file_path}.pkl'.format(file_path=self.file_path), 'rb') as f:
-                self.model = pickle.load(f)
-        if self.encoder_type == 'dense_autoencoder':
-            self.encoder = models.load_model('{file_path}_encoder.pkl'.format(file_path=self.file_path))
-            self.autoencoder = models.load_model('{file_path}_autoencoder.pkl'.format(file_path=self.file_path))
-        with open('{file_path}.pkl'.format(file_path=self.scaler_file_path), 'rb') as f:
-            self.scaler_dict = pickle.load(f)
+import uuid
 
 
 def conv1d_cell(convolutional_filters,
@@ -379,11 +202,12 @@ def get_nn_model(input_shape1,
 
 
 def optimize_nn():
+    run_id = str(uuid.uuid4().hex)
     layers_width = list(range(16, 256))
     layers_width_2 = list(range(16, 128))
     convolutional_kernel_size = list(range(1, 10))
     convolutional_pool_size = list(range(1, 5))
-    number_of_layers = [0, 1, 2, 3]
+    number_of_layers = [0, 1, 2]
 
     pooling_algorithm = ['layers.MaxPooling1D', None]
     convolution_type = ['layers.Conv1D', 'layers.SeparableConv1D', 'layers.LocallyConnected1D']
@@ -402,11 +226,11 @@ def optimize_nn():
                            'optimizers.Nadam()']
 
     history_lengths = [4, 8, 16, 32, 64]
-    general_feature_encoding_size = [None]
+    general_feature_encoding_size = [None, 4, 8, 16, 32, 64, 128]
     scaled = [True, False]
-    # process_raw_data(sample = False)
-    # process_general_features()
-    # generate_time_series_features(history_lengths, use_standard_scaler=True)
+    process_raw_data(sample = False)
+    process_general_features(aggregation_windows = [1, 5, 20], encoding_sizes = general_feature_encoding_size)
+    generate_time_series_features(history_lengths)
     data = load_all_feature_file(history_lengths, general_feature_encoding_size)
 
     # x2 = data['general_features_scaled'].drop(['win', 'score_diff', 'key'], axis = 1)
@@ -425,6 +249,7 @@ def optimize_nn():
                     x1_train, x1_val, x2_train, x2_val, y_train, y_val = train_test_split(data[f'time_series_{history_length}_{s}'], x2, y, random_state=1)
                     x1_val, x1_test, x2_val, x2_test, y_val, y_test = train_test_split(x1_val, x2_val, y_val, train_size=.5,
                                                                                        random_state=1)
+                    print(x1_train.shape, x2_train.shape, y_train.shape)
                     dms[(history_length, s, e)] = {'x1_train': x1_train,
                                    'x1_val': x1_val,
                                    'x1_test': x1_test,
@@ -436,10 +261,7 @@ def optimize_nn():
                                    'y_test': y_test}
                     keys.append((history_length, s, e))
 
-    try:
-        results = pd.read_csv(f'{data_path}/nn_architectures.csv').to_dict(orient='records')
-    except:
-        results = list()
+    results = list()
 
     while True:
         choice_dict = {
@@ -566,7 +388,7 @@ def optimize_nn():
             traceback.print_exc()
 
         results.append(choice_dict)
-        pd.DataFrame.from_dict(results).to_csv(f'{data_path}/nn_architectures.csv', index=False)
+        pd.DataFrame.from_dict(results).to_csv(f'{data_path}/nn_architectures_{run_id}.csv', index=False)
 
 
 if __name__ == '__main__':
