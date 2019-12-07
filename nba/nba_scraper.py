@@ -316,11 +316,11 @@ class Scraper:
             counter += 1
             print(f'Counter: {counter}, Save frequency: {self.save_frequency}, Modulo: {counter % self.save_frequency}')
 
-            if counter % 100 == 0:
+            if counter % self.save_frequency == 0:
                 self.save_data()
 
 
 if __name__ == '__main__':
-    scraper = Scraper(start_date = datetime.date(1980, 6, 30), end_date = datetime.date(2019, 6, 30), clear_data=False, save_frequency = 20)
+    scraper = Scraper(start_date = datetime.date(1980, 6, 30), end_date = datetime.date(2019, 6, 30), clear_data=False, save_frequency = 365)
     scraper.scrape_date_range_boxscore_links_and_details()
 

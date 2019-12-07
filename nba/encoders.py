@@ -35,22 +35,36 @@ def get_dense_autoencoder(input_shape,
                           dense_layer_activations,
                           bottleneck_layer_activations,
                           target_activations):
+
+
     input_layer = layers.Input(shape=input_shape)
-    encoder = layers.Dense(2048, activation=dense_layer_activations)(input_layer)
+    encoder = layers.Dense(max(512, bottleneck_size*8), activation=dense_layer_activations)(input_layer)
     encoder = layers.BatchNormalization()(encoder)
-    encoder = layers.Dense(max(1024, bottleneck_size), activation=dense_layer_activations)(encoder)
+    # encoder = layers.Dense(max(768, bottleneck_size*12), activation=dense_layer_activations)(encoder)
+    # encoder = layers.BatchNormalization()(encoder)
+    # encoder = layers.Dense(max(512, bottleneck_size*8), activation=dense_layer_activations)(encoder)
+    # encoder = layers.BatchNormalization()(encoder)
+    # encoder = layers.Dense(max(384, bottleneck_size*6), activation=dense_layer_activations)(encoder)
+    # encoder = layers.BatchNormalization()(encoder)
+    encoder = layers.Dense(max(256, bottleneck_size*4), activation=dense_layer_activations)(encoder)
     encoder = layers.BatchNormalization()(encoder)
-    encoder = layers.Dense(max(512, bottleneck_size), activation=dense_layer_activations)(encoder)
+    encoder = layers.Dense(max(192, bottleneck_size*3), activation=dense_layer_activations)(encoder)
     encoder = layers.BatchNormalization()(encoder)
-    encoder = layers.Dense(max(256, bottleneck_size), activation=dense_layer_activations)(encoder)
+    encoder = layers.Dense(max(128, bottleneck_size*2), activation=dense_layer_activations)(encoder)
     encoder_out = layers.Dense(bottleneck_size, activation=bottleneck_layer_activations, name='bottleneck')(encoder)
-    decoder = layers.Dense(max(256, bottleneck_size), activation=dense_layer_activations)(encoder_out)
+    decoder = layers.Dense(max(128, bottleneck_size*2), activation=dense_layer_activations)(encoder_out)
     decoder = layers.BatchNormalization()(decoder)
-    decoder = layers.Dense(max(512, bottleneck_size), activation=dense_layer_activations)(decoder)
+    decoder = layers.Dense(max(192, bottleneck_size*3), activation=dense_layer_activations)(decoder)
     decoder = layers.BatchNormalization()(decoder)
-    decoder = layers.Dense(max(1024, bottleneck_size), activation=dense_layer_activations)(decoder)
+    decoder = layers.Dense(max(256, bottleneck_size*4), activation=dense_layer_activations)(decoder)
+    # decoder = layers.BatchNormalization()(decoder)
+    # decoder = layers.Dense(max(384, bottleneck_size*6), activation=dense_layer_activations)(decoder)
+    # decoder = layers.BatchNormalization()(decoder)
+    # decoder = layers.Dense(max(512, bottleneck_size*8), activation=dense_layer_activations)(decoder)
+    # decoder = layers.BatchNormalization()(decoder)
+    # decoder = layers.Dense(max(768, bottleneck_size*12), activation=dense_layer_activations)(decoder)
     decoder = layers.BatchNormalization()(decoder)
-    decoder = layers.Dense(2048, activation=dense_layer_activations)(decoder)
+    decoder = layers.Dense(max(512, bottleneck_size*8), activation=dense_layer_activations)(decoder)
     out = layers.Dense(input_shape[0], activation=target_activations)(decoder)
 
     autoencoder = models.Model(input_layer, out)
@@ -166,8 +180,8 @@ class Encoder:
                 pickle.dump(self.model, f)
 
         if self.encoder_type == 'dense_autoencoder':
-            models.save_model(self.encoder, f'{self.file_path}_encoder.pkl')
-            models.save_model(self.autoencoder, f'{self.file_path}_autoencoder.pkl')
+            models.save_model(self.encoder, f'{self.file_path}_encoder.h5')
+            models.save_model(self.autoencoder, f'{self.file_path}_autoencoder.h5')
         with open(f'{self.scaler_file_path}.pkl'.format(file_path=self.scaler_file_path), 'wb') as f:
             pickle.dump(self.scaler_dict, f)
 
@@ -176,7 +190,7 @@ class Encoder:
             with open('{file_path}.pkl'.format(file_path=self.file_path), 'rb') as f:
                 self.model = pickle.load(f)
         if self.encoder_type == 'dense_autoencoder':
-            self.encoder = models.load_model('{file_path}_encoder.pkl'.format(file_path=self.file_path))
-            self.autoencoder = models.load_model('{file_path}_autoencoder.pkl'.format(file_path=self.file_path))
+            self.encoder = models.load_model('{file_path}_encoder.h5'.format(file_path=self.file_path))
+            self.autoencoder = models.load_model('{file_path}_autoencoder.h5'.format(file_path=self.file_path))
         with open('{file_path}.pkl'.format(file_path=self.scaler_file_path), 'rb') as f:
             self.scaler_dict = pickle.load(f)

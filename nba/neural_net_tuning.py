@@ -65,15 +65,24 @@ def recurrent_cell(recurrent_layers, recurrent_type, recurrent_layers_width, ret
 
 def get_nn_model(input_shape1,
                  input_shape2,
-                 convolutional_kernel_size,
-                 convolutional_pool_size,
-                 pooling_algorithm,
-                 convolution_type,
+                 convolutional_kernel_size_1,
+                 convolutional_kernel_size_2,
+                 convolutional_pool_size_1,
+                 convolutional_pool_size_2,
+                 pooling_algorithm_1,
+                 pooling_algorithm_2,
+                 convolution_type_1,
+                 convolution_type_2,
+                 conv_layers_per_pooling_layer_1,
+                 conv_layers_per_pooling_layer_2,
+                 convolutional_filters_1,
+                 convolutional_filters_2,
+                 convolutional_layers_1,
+                 convolutional_layers_2,
                  recurrent_type,
                  use_x1,
                  use_x2,
                  optimizer_algorithm,
-                 conv_layers_per_pooling_layer,
                  batchnorm,
                  block_1_activations,
                  block_2_activations,
@@ -90,9 +99,8 @@ def get_nn_model(input_shape1,
                  block_1_dense_layers_width,
                  merge_block_layers,
                  block_2_layers,
-                 convolutional_filters,
+
                  dense_top_layers,
-                 convolutional_layers,
                  recurrent_layers,
                  block_1_dense_layers,
                  block_1_dropout_amount,
@@ -101,6 +109,8 @@ def get_nn_model(input_shape1,
             top_block_dropout_amount,
                  ):
 
+    x_created = False
+
     if use_x1:
         input_layer_1 = layers.Input(shape=input_shape1)
     if use_x2:
@@ -108,14 +118,27 @@ def get_nn_model(input_shape1,
 
     if use_x1:
 
-        if convolutional_layers:
-            x_conv = conv1d_cell(convolutional_filters, convolutional_kernel_size, block_1_activations,
-                                 pooling_algorithm,
-                                 convolutional_pool_size, convolution_type, convolutional_layers,
-                                 conv_layers_per_pooling_layer, batchnorm=batchnorm, data_format='channels_last',
+        if convolutional_layers_1:
+            x_conv1 = conv1d_cell(convolutional_filters_1, convolutional_kernel_size_1, block_1_activations,
+                                 pooling_algorithm_1,
+                                 convolutional_pool_size_1, convolution_type_1, convolutional_layers_1,
+                                 conv_layers_per_pooling_layer_1, batchnorm=batchnorm, data_format='channels_last',
                                  dropout=block_1_dropout, dropout_amount=block_1_dropout_amount)(input_layer_1)
-            x_conv = layers.Flatten(name='convolution_cell')(x_conv)
-            x = x_conv
+            x_conv1 = layers.Flatten(name='convolution_cell')(x_conv1)
+            x = x_conv1
+            x_created = True
+        if convolutional_layers_2:
+            x_conv2 = conv1d_cell(convolutional_filters_2, convolutional_kernel_size_2, block_1_activations,
+                                 pooling_algorithm_2,
+                                 convolutional_pool_size_2, convolution_type_1, convolutional_layers_2,
+                                 conv_layers_per_pooling_layer_2, batchnorm=batchnorm, data_format='channels_last',
+                                 dropout=block_1_dropout, dropout_amount=block_1_dropout_amount)(input_layer_1)
+            x_conv2 = layers.Flatten(name='convolution_cell2')(x_conv2)
+            if x_created:
+                x = layers.Concatenate()([x, x_conv2])
+            else:
+                x = x_conv2
+                x_created = True
 
         if recurrent_layers:
             x_rnn = recurrent_cell(recurrent_layers=recurrent_layers,
@@ -124,10 +147,11 @@ def get_nn_model(input_shape1,
                 input_layer_1)
 
             x_rnn = layers.Flatten()(x_rnn)
-            if not (convolutional_layers):
-                x = x_rnn
-            else:
+            if x_created:
                 x = layers.Concatenate()([x, x_rnn])
+            else:
+                x = x_rnn
+                x_created = True
 
         if block_1_dense_layers:
             x_dnn = layers.Flatten(name='flatten15')(input_layer_1)
@@ -138,14 +162,13 @@ def get_nn_model(input_shape1,
                 if block_1_dropout:
                     x_dnn = eval(block_1_dropout)(block_1_dropout_amount)(x_dnn)
 
-            if not (
-                     convolutional_layers or recurrent_layers):
-                x = x_dnn
+            if x_created:
+                x = layers.Concatenate()([x, x_dnn])
             else:
-                x = layers.Concatenate(name='main_block_1_dense_layers')([x, x_dnn])
+                x = x_dnn
+                x_created = True
 
-        if merge_block_layers and (
-                convolutional_layers or recurrent_layers or block_1_dense_layers):
+        if merge_block_layers and (not x_created):
             x = layers.Dense(merge_block_width, activation=merge_activations)(x)
             if merge_block_dropout:
                 x = eval(merge_block_dropout)(merge_block_dropout_amount)(x)
@@ -204,10 +227,10 @@ def get_nn_model(input_shape1,
 def optimize_nn():
     run_id = str(uuid.uuid4().hex)
     layers_width = list(range(16, 256))
-    layers_width_2 = list(range(16, 128))
+    layers_width_2 = list(range(16, 256))
     convolutional_kernel_size = list(range(1, 10))
     convolutional_pool_size = list(range(1, 5))
-    number_of_layers = [0, 1, 2]
+    number_of_layers = [0, 1, 2, 3]
 
     pooling_algorithm = ['layers.MaxPooling1D', None]
     convolution_type = ['layers.Conv1D', 'layers.SeparableConv1D', 'layers.LocallyConnected1D']
@@ -217,7 +240,7 @@ def optimize_nn():
     dropout = [None, 'layers.GaussianNoise', 'layers.Dropout', 'layers.GaussianDropout',
                'layers.AlphaDropout']
     binary_list = [0, 1]
-
+    encoding_types = ['pca', 'dense_autoencoder']
     optimizer_algorithm = ['optimizers.SGD()',
                            'optimizers.RMSprop()',
                            'optimizers.Adagrad()',
@@ -226,11 +249,11 @@ def optimize_nn():
                            'optimizers.Nadam()']
 
     history_lengths = [4, 8, 16, 32, 64]
-    general_feature_encoding_size = [None, 4, 8, 16, 32, 64, 128]
+    general_feature_encoding_size = [None, 16, 128]
     scaled = [True, False]
-    process_raw_data(sample = False)
-    process_general_features(aggregation_windows = [1, 5, 20], encoding_sizes = general_feature_encoding_size)
-    generate_time_series_features(history_lengths)
+    # process_raw_data(sample = False)
+    # process_general_features(aggregation_windows = [1, 5, 20], encoding_sizes = general_feature_encoding_size)
+    # generate_time_series_features(history_lengths)
     data = load_all_feature_file(history_lengths, general_feature_encoding_size)
 
     # x2 = data['general_features_scaled'].drop(['win', 'score_diff', 'key'], axis = 1)
@@ -246,34 +269,44 @@ def optimize_nn():
 
         for history_length in history_lengths:
             for s in scaled:
-                    x1_train, x1_val, x2_train, x2_val, y_train, y_val = train_test_split(data[f'time_series_{history_length}_{s}'], x2, y, random_state=1)
-                    x1_val, x1_test, x2_val, x2_test, y_val, y_test = train_test_split(x1_val, x2_val, y_val, train_size=.5,
-                                                                                       random_state=1)
-                    print(x1_train.shape, x2_train.shape, y_train.shape)
-                    dms[(history_length, s, e)] = {'x1_train': x1_train,
-                                   'x1_val': x1_val,
-                                   'x1_test': x1_test,
-                                   'x2_train': x2_train,
-                                   'x2_val': x2_val,
-                                   'x2_test': x2_test,
-                                   'y_train': y_train,
-                                   'y_val': y_val,
-                                   'y_test': y_test}
-                    keys.append((history_length, s, e))
+                print('here', e, history_length, s, data[f'time_series_{history_length}_{s}'].shape, x2.shape, y.shape, type(data[f'time_series_{history_length}_{s}']), type(x2), type(y))
+                x1_train, x1_val, x2_train, x2_val, y_train, y_val = train_test_split(data[f'time_series_{history_length}_{s}'], x2, y, random_state=1)
+                x1_val, x1_test, x2_val, x2_test, y_val, y_test = train_test_split(x1_val, x2_val, y_val, train_size=.5,
+                                                                                   random_state=1)
+                print(x1_train.shape, x2_train.shape, y_train.shape)
+                dms[(history_length, s, e)] = {'x1_train': x1_train,
+                               'x1_val': x1_val,
+                               'x1_test': x1_test,
+                               'x2_train': x2_train,
+                               'x2_val': x2_val,
+                               'x2_test': x2_test,
+                               'y_train': y_train,
+                               'y_val': y_val,
+                               'y_test': y_test}
+                keys.append((history_length, s, e))
 
     results = list()
 
     while True:
         choice_dict = {
-            'convolutional_kernel_size': random.choice(convolutional_kernel_size),
-            'convolutional_pool_size': random.choice(convolutional_pool_size),
-            'pooling_algorithm': random.choice(pooling_algorithm),
-            'convolution_type': random.choice(convolution_type),
+            'convolutional_kernel_size_1': random.choice(convolutional_kernel_size),
+            'convolutional_pool_size_1': random.choice(convolutional_pool_size),
+            'pooling_algorithm_1': random.choice(pooling_algorithm),
+            'convolution_type_1': random.choice(convolution_type),
+            'convolutional_layers_1': random.choice(number_of_layers),
+             'convolutional_filters_1': random.choice(layers_width_2),
+            'conv_layers_per_pooling_layer_1': random.choice(number_of_layers),
+            'conv_layers_per_pooling_layer_2': random.choice(number_of_layers),
+            'convolutional_kernel_size_2': random.choice(convolutional_kernel_size),
+            'convolutional_pool_size_2': random.choice(convolutional_pool_size),
+            'pooling_algorithm_2': random.choice(pooling_algorithm),
+            'convolution_type_2': random.choice(convolution_type),
+            'convolutional_layers_2': random.choice(number_of_layers),
+             'convolutional_filters_2': random.choice(layers_width_2),
             'recurrent_type': random.choice(recurrent_type),
             'use_x1': random.choice(binary_list),
             'use_x2': random.choice(binary_list),
             'optimizer_algorithm': random.choice(optimizer_algorithm),
-            'conv_layers_per_pooling_layer': random.choice(number_of_layers),
             'batchnorm': random.choice(binary_list),
             'block_1_activations': random.choice(activations),
             'block_2_activations': random.choice(activations),
@@ -290,9 +323,7 @@ def optimize_nn():
             'block_1_dense_layers_width': random.choice(layers_width),
             'merge_block_layers': random.choice(binary_list),
             'block_2_layers': random.choice(number_of_layers),
-            'convolutional_filters': random.choice(layers_width_2),
             'dense_top_layers': random.choice(number_of_layers),
-            'convolutional_layers': random.choice(number_of_layers),
             'recurrent_layers': random.choice(number_of_layers),
             'block_1_dense_layers': random.choice(number_of_layers),
             'block_1_dropout_amount':random.random()*.8,
@@ -331,35 +362,35 @@ def optimize_nn():
             start_time = time.time()
             cb = callbacks.EarlyStopping(monitor='val_loss',
                                          min_delta=0,
-                                         patience=2,
+                                         patience=0,
                                          verbose=0, mode='auto')
-            mcp_save = callbacks.ModelCheckpoint('{}/test.h5'.format(data_path), save_best_only=True,
-                                                 monitor='val_loss',
-                                                 verbose=1)
+            # mcp_save = callbacks.ModelCheckpoint('{}/test.h5'.format(data_path), save_best_only=True,
+            #                                      monitor='val_loss',
+            #                                      verbose=1)
 
             if choice_dict['use_x1'] and choice_dict['use_x2']:
                 model.fit([x1_train, dms[key]['x2_train']],
                           dms[key]['y_train'],
                           validation_data=([x1_val, dms[key]['x2_val']],
                                            dms[key]['y_val']),
-                          callbacks=[cb, mcp_save], epochs=200, batch_size=128)
+                          callbacks=[cb], epochs=200, batch_size=128)
             elif choice_dict['use_x1']:
                 model.fit(x1_train,
                           dms[key]['y_train'],
                           validation_data=(x1_val,
                                            dms[key]['y_val']),
-                          callbacks=[cb, mcp_save], epochs=200, batch_size=128)
+                          callbacks=[cb], epochs=200, batch_size=128)
             elif choice_dict['use_x2']:
                 model.fit(dms[key]['x2_train'],
                           dms[key]['y_train'],
                           validation_data=(dms[key]['x2_val'],
                                            dms[key]['y_val']),
-                          callbacks=[cb, mcp_save], epochs=200, batch_size=128)
+                          callbacks=[cb], epochs=200, batch_size=128)
 
             choice_dict['model_training_time'] = time.time() - start_time
-            del model
-            gc.collect()
-            model = models.load_model('{}/test.h5'.format(data_path))
+            # del model
+            # gc.collect()
+            # model = models.load_model('{}/test.h5'.format(data_path))
 
             if choice_dict['use_x1'] and choice_dict['use_x2']:
                 preds = model.predict([x1_test, dms[key]['x2_test']])
@@ -379,7 +410,7 @@ def optimize_nn():
                 truth,
                 preds)
             choice_dict['accuracy'] = score
-            del model, preds, score, cb, mcp_save, x1_train, x1_test, x1_val
+            del model, preds, score, cb , x1_train, x1_test, x1_val
             gc.collect()
 
         except AssertionError:
