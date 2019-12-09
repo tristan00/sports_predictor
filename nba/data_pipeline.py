@@ -26,7 +26,7 @@ from sklearn import decomposition
 import pickle
 import copy
 import time
-
+import gc
 
 #################################################################################################################
 # Data processing/cleaning/structuring
@@ -419,16 +419,40 @@ def generate_team_time_series(df, history_length, time_series_cols, use_standard
         temp_team_df_dict[t] = temp_team_df_dict[t].set_index('key')
 
         for g in game_ids:
+            g_eval = eval(g)
+            # print(g_eval)
+            temp_date_str, temp_team_tag, temp_opponent_tag = g_eval
+            opponent_game_id = str((temp_date_str, temp_opponent_tag, temp_team_tag))
+
             g_iloc = temp_team_df_dict[t].index.get_loc(g)
-            pregame_matrix = temp_team_df_dict[t].iloc[g_iloc - history_length:g_iloc][temp_time_series_cols].fillna(
-                0).values
-            while pregame_matrix.shape[0] < history_length:
+            pregame_df= temp_team_df_dict[t].iloc[g_iloc - history_length:g_iloc][temp_time_series_cols].fillna(0)
+            pregame_df = pregame_df.reindex(sorted(pregame_df.columns), axis=1)
+            pregame_data = pregame_df.values
+            while pregame_data.shape[0] < history_length:
                 new_array = np.array([[0 for _ in temp_time_series_cols]])
-                pregame_matrix = np.vstack([new_array, pregame_matrix])
-            past_n_game_dataset[g] = pregame_matrix
+                pregame_data = np.vstack([new_array, pregame_data])
+
+            past_n_game_dataset[g] = {'columns':pregame_df.columns.tolist(),
+                                      'data':pregame_data,
+                                      'opponent_game_id':opponent_game_id}
+
+    past_n_game_dataset_output = dict()
+    for k, v in past_n_game_dataset.items():
+        team_data = np.copy(v['data'])
+        opponent_data = np.copy(past_n_game_dataset[v['opponent_game_id']]['data'])
+        diff_data = team_data - opponent_data
+        out_data = np.hstack([team_data, opponent_data, diff_data])
+
+        team_columns = copy.deepcopy(v['columns'])
+        opponent_columns = ['{}_time_series_opponent_values'.format(i) for i in copy.deepcopy(v['columns'])]
+        diff_columns = ['{}_time_series_opponent_diff'.format(i) for i in copy.deepcopy(v['columns'])]
+        out_columns = team_columns + opponent_columns + diff_columns
+
+        past_n_game_dataset_output[k] = {'data':out_data,
+                                         'columns':out_columns}
 
     output = list()
-    for k, v in past_n_game_dataset.items():
+    for k, v in past_n_game_dataset_output.items():
         output.append((k, v))
 
     with open(f'{data_path}/{team_time_series_file_loc}_{history_length}_{use_standard_scaler}.pkl', 'wb') as f:
@@ -437,18 +461,22 @@ def generate_team_time_series(df, history_length, time_series_cols, use_standard
 
 @timeit
 def generate_time_series_features(history_lengths):
+    '''
+    :param history_lengths:
+    :param data_choices: raw, all, diff
+    :return:
+    '''
     team_df, _ = get_processed_data()
 
-    # team_columns_to_aggregate = ['ast', 'ast_pct', 'blk', 'blk_pct', 'def_rtg', 'drb', 'drb_pct', 'efg_pct',
-    #                                   'fg', 'fg3', 'fg3_pct', 'fg3a', 'fg3a_per_fga_pct', 'fg_pct', 'fga', 'ft',
-    #                                   'ft_pct', 'fta', 'fta_per_fga_pct', 'off_rtg', 'orb', 'orb_pct', 'pf',
-    #                                   'pts', 'stl', 'stl_pct', 'tov', 'tov_pct', 'trb', 'trb_pct',
-    #                                   'ts_pct', 'usg_pct', 'home', 'win', 'days_since_last_match', 'score_diff']
-    team_columns_to_aggregate = ['efg_pct', 'drb', 'fg3a_per_fga_pct', 'fg3', 'tov', 'fga', 'off_rtg', 'trb_pct',
-                                 'ast_pct', 'ast', 'fta_per_fga_pct', 'stl_pct', 'fg3_pct', 'orb', 'orb_pct', 'fg',
-                                 'ft_pct', 'plus_minus', 'blk_pct', 'ts_pct', 'trb', 'fg3a', 'pf']
-    time_series_cols = team_columns_to_aggregate + ['team_pregame_rating_0',
-                                                    'days_since_last_match']
+    team_columns_to_aggregate = ['ast', 'ast_pct', 'blk', 'blk_pct', 'def_rtg', 'drb', 'drb_pct', 'efg_pct',
+                                      'fg', 'fg3', 'fg3_pct', 'fg3a', 'fg3a_per_fga_pct', 'fg_pct', 'fga', 'ft',
+                                      'ft_pct', 'fta', 'fta_per_fga_pct', 'off_rtg', 'orb', 'orb_pct', 'pf',
+                                      'pts', 'stl', 'stl_pct', 'tov', 'tov_pct', 'trb', 'trb_pct',
+                                      'ts_pct', 'usg_pct', 'home', 'win', 'days_since_last_match', 'score_diff']
+    # team_columns_to_aggregate = ['efg_pct', 'drb', 'fg3a_per_fga_pct', 'fg3', 'tov', 'fga', 'off_rtg', 'trb_pct',
+    #                              'ast_pct', 'ast', 'fta_per_fga_pct', 'stl_pct', 'fg3_pct', 'orb', 'orb_pct', 'fg',
+    #                              'ft_pct', 'plus_minus', 'blk_pct', 'ts_pct', 'trb', 'fg3a', 'pf']
+    time_series_cols = team_columns_to_aggregate + ['team_pregame_rating_0', 'day', 'month', 'year']
     team_df_scaled = scale_data(team_df, time_series_cols)
 
     for history_length in history_lengths:
@@ -469,8 +497,59 @@ def load_general_feature_file(use_standard_scaler=False):
     return feature_df
 
 
+def load_time_series_data_and_target(history_lengths, target):
+
+    feature_df = pd.read_csv(f'{data_path}/{general_feature_data_table_name}.csv', sep='|', low_memory=False)
+    feature_df = feature_df.sort_values('key')
+
+    #keys should be stored by date
+    feature_df_train = feature_df.iloc[:int(feature_df.shape[0]*.8)]
+    feature_df_val = feature_df.iloc[int(feature_df.shape[0]*.8):int(feature_df.shape[0]*.9)]
+    feature_df_test = feature_df.iloc[int(feature_df.shape[0]*.9):]
+
+    output_dict_base = {'y_train': feature_df_train[target],
+                   'y_val': feature_df_val[target],
+                   'y_test': feature_df_test[target]}
+
+    output_dict = dict()
+    for history_length in history_lengths:
+        for scaled in [True, False]:
+            print(history_length, scaled)
+            with open(f'{data_path}/{team_time_series_file_loc}_{history_length}_{scaled}.pkl', 'rb') as f:
+                temp_time_series = pickle.load(f)
+            temp_time_series = sorted(temp_time_series, key=lambda x: x[0])
+            output_dict_copy = copy.deepcopy(output_dict_base)
+
+            output_dict_copy['x_train'] = list()
+            output_dict_copy['x_val'] = list()
+            output_dict_copy['x_test'] = list()
+
+            for n, i in enumerate(temp_time_series):
+                next_data = i[1]['data']
+                next_columns = i[1]['columns']
+                next_df = pd.DataFrame(data = next_data,
+                                       columns = next_columns)
+                if n < feature_df_train.shape[0]:
+                    output_dict_copy['x_train'].append(next_df)
+                elif n < feature_df_train.shape[0] + feature_df_val.shape[0]:
+                    output_dict_copy['x_val'].append(next_df)
+                else:
+                    output_dict_copy['x_test'].append(next_df)
+            del temp_time_series
+            gc.collect()
+            #
+            # output_dict_copy['x_train'] = [i[1] for i in temp_time_series[:feature_df_train]]
+            # output_dict_copy['x_val'] = [i[1] for i in temp_time_series[int(feature_df.shape[0]*.8):int(feature_df.shape[0]*.9)]]
+            # output_dict_copy['x_test'] = [i[1] for i in temp_time_series[int(feature_df.shape[0]*.9):]]
+
+            output_dict[(history_length, scaled)] = output_dict_copy
+
+    return output_dict
+
+
+
 @timeit
-def load_all_feature_file(history_lengths, general_features_encoding_lengths):
+def load_all_feature_files(history_lengths, timeseries_data_choices, general_features_encoding_lengths):
     output_dict = dict()
     feature_df = pd.read_csv(f'{data_path}/{general_feature_data_table_name}.csv', sep='|', low_memory=False)
     feature_df = feature_df.sort_values('key')
@@ -478,13 +557,13 @@ def load_all_feature_file(history_lengths, general_features_encoding_lengths):
     feature_scaled_df = pd.read_csv(f'{data_path}/{general_feature_scaled_data_table_name}.csv', sep='|',
                                     low_memory=False)
     feature_scaled_df = feature_scaled_df.sort_values('key')
-
-    for h in history_lengths:
-        for i in [True, False]:
-            with open(f'{data_path}/{team_time_series_file_loc}_{h}_{i}.pkl', 'rb') as f:
-                temp_time_series = pickle.load(f)
-            temp_time_series = sorted(temp_time_series, key=lambda x: x[0])
-            output_dict[f'time_series_{h}_{i}'] = np.array([i[1] for i in temp_time_series])
+    for d in timeseries_data_choices:
+        for h in history_lengths:
+            for i in [True, False]:
+                with open(f'{data_path}/{team_time_series_file_loc}_{h}_{i}_{d}.pkl', 'rb') as f:
+                    temp_time_series = pickle.load(f)
+                temp_time_series = sorted(temp_time_series, key=lambda x: x[0])
+                output_dict[f'time_series_{h}_{i}_{d}'] = np.array([i[1] for i in temp_time_series])
 
     for i in general_features_encoding_lengths:
         if i:
@@ -502,23 +581,17 @@ def load_all_feature_file(history_lengths, general_features_encoding_lengths):
 # Test functions
 
 
-def run_pipeline(sample=False):
-    if sample:
-        aggregation_windows = [3, 100]
-        encoding_sizes = [None, 8, 16, 32]
-        encoding_types = ['pca']
-        history_lengths = [8]
-    else:
-        aggregation_windows = [7, 75]
-        encoding_sizes = [16, 128]
-        encoding_types = ['pca']
-        # encoding_types = ['pca']
-        history_lengths = [4, 8, 16, 32, 64, 128]
-
-    process_raw_data(sample = sample)
-    process_general_features(aggregation_windows, encoding_sizes, encoding_types)
+def run_pipeline(aggregation_windows,
+                 encoding_sizes,
+                 encoding_types,
+                 history_lengths):
+    # process_raw_data(sample = sample)
+    # process_general_features(aggregation_windows, encoding_sizes, encoding_types)
     generate_time_series_features(history_lengths)
 
 
 if __name__ == '__main__':
-    run_pipeline(sample=False)
+    run_pipeline(aggregation_windows=[7, 75],
+                 encoding_sizes=[16, 128],
+                 encoding_types=['pca'],
+                 history_lengths=[64])

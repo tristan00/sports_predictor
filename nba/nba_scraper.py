@@ -318,9 +318,10 @@ class Scraper:
 
             if counter % self.save_frequency == 0:
                 self.save_data()
+        self.save_data()
 
 
 if __name__ == '__main__':
-    scraper = Scraper(start_date = datetime.date(1980, 6, 30), end_date = datetime.date(2019, 6, 30), clear_data=False, save_frequency = 365)
+    scraper = Scraper(start_date = datetime.date(2019, 6, 30), end_date = datetime.date.today(), clear_data=False, save_frequency = 100)
     scraper.scrape_date_range_boxscore_links_and_details()
 
